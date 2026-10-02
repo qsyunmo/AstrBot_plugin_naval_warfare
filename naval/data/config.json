@@ -1,7 +1,18 @@
 {
   "_comment": "海战模拟器全局平衡配置（P0 占位，数值按文档§18.10锚点后续调校，改数不动代码）",
   "world": { "map_size": 1000, "seed": 20261001 },
-  "tick": { "economic_min": 20, "war_min": 2, "loop_seconds": 10 },
+  "tick": {
+    "_comment": "economic_min 同时是「1 经济 tick = 多少游戏分钟」与「多少真实分钟」——它是全局时间尺度，调小=整局跑得更快（资源速率比不变）。war_min 同理。",
+    "economic_min": 8,
+    "_economic_min": "原 20；调成 8 后 Lv1 建筑由 80 分钟缩到 24 分钟",
+    "war_min": 1,
+    "_war_min": "原 2；战斗每 1 分钟结算一轮，一场 5~17 轮的仗由 10~34 分钟缩到 5~17 分钟",
+    "loop_seconds": 10,
+    "rush_mult": 1.6,
+    "_rush_mult": "加急立即完成的费用倍率（1.6 = 多付 60%）",
+    "rush_enabled": true,
+    "_rush_enabled": "关闭则全服禁用加急"
+  },
   "spawn": {
     "min_dist": 15, "max_dist": 30, "max_tries": 300, "allow_reroll": true,
     "capital_ore_min": 3
@@ -31,11 +42,12 @@
       "ore_table": {"iron": [1,2], "aluminium": [0,2]}, "fishery": false, "hp": 260 }
   },
   "cost_tiers": {
-    "1": { "steel": 50,  "oil": 0,   "money": 100,  "work": 4 },
-    "2": { "steel": 150, "oil": 20,  "money": 300,  "work": 10 },
-    "3": { "steel": 400, "oil": 80,  "money": 800,  "work": 24 },
-    "4": { "steel": 1000,"oil": 300, "money": 2000, "work": 60 },
-    "5": { "steel": 2500,"oil": 800, "money": 5000, "work": 150 }
+    "_comment": "work 单位为经济 tick。下调后（配合 economic_min=8）：Lv1 24分钟 / Lv2 48分钟 / Lv3 1.6小时 / Lv4 3.2小时 / Lv5 6.4小时；嫌久可加急",
+    "1": { "steel": 50,  "oil": 0,   "money": 100,  "work": 3 },
+    "2": { "steel": 150, "oil": 20,  "money": 300,  "work": 6 },
+    "3": { "steel": 400, "oil": 80,  "money": 800,  "work": 12 },
+    "4": { "steel": 1000,"oil": 300, "money": 2000, "work": 24 },
+    "5": { "steel": 2500,"oil": 800, "money": 5000, "work": 48 }
   },
   "buildings": {
     "governor":     { "name": "总督府", "max_lv": 10, "unique": true, "cost_special": "governor",

@@ -83,6 +83,7 @@ COMMANDS = {
     "观战": ("spectate", True, [], "观战 [战斗编号]（§27.4 中立旁观，不参战无收益）"),
     # —— P2b §6.2：外交扩展 ——
     "贸易": ("trade_cmd", True, [], "贸易 [挂单|市场|接受|拒绝|撤单] ...（§6.2 资源贸易与市场）"),
+    "加急": ("rush_cmd", True, ["加速", "催工"], "加急：花额外资源立即完成已排队的建造/生产/研究"),
     "租港": ("lease_cmd", True, [], "租港 <盟友> <坐标>（§6.2 军港租借）"),
     "间谍": ("spy_cmd", True, [], "间谍 <玩家> <行动>（§6.2 破坏/窃取/煽动）"),
     "索赔": ("reparations_cmd", True, [], "索赔 <玩家> <金额> [坐标...]（§6.2 赔款割岛）"),
@@ -438,18 +439,9 @@ class GameCommands:
 
     # ---------- 建造 ----------
     def _building_cost(self, def_id: str, target_lv: int):
-        """返回 (costs{steel,oil,money}, work_ticks)。"""
-        bdef = self.cfg["buildings"][def_id]
-        if bdef.get("cost_special") == "governor":
-            base = self.cfg["cost_tiers"]["2"]
-            mult = target_lv ** 1.3
-            return ({k: int(base[k] * mult) for k in ("steel", "oil", "money")},
-                    max(2, int(base["work"] * mult / 2)))
-        tier = min(5, target_lv)
-        base = self.cfg["cost_tiers"][str(tier)]
-        extra = 1.6 ** max(0, target_lv - 5)
-        return ({k: int(base[k] * extra) for k in ("steel", "oil", "money")},
-                int(base["work"] * extra))
+        """返回 (costs{steel,oil,money}, work_ticks)。逻辑已抽到 gov.py 供 Web 共用。"""
+        from . import gov as _gov
+        return _gov.building_cost(self.cfg, def_id, target_lv)
 
     async def build(self, ctx: Ctx) -> str:
         p = self._player(ctx.qq)
@@ -499,10 +491,72 @@ class GameCommands:
         action = {"type": "build", "def_id": def_id, "target_lv": target_lv,
                   "x": x, "y": y, "costs": costs, "end_tick": econ_tick + work}
         self.confirm.put(ctx.origin, ctx.qq, action)
+        from . import gov as _gov
+        rmul = _gov.rush_mult(self.cfg)
+        rcost = _gov._rush_cost(self.cfg, costs)
+        rextra = "、".join(f"{RES_NAME[k]}{rcost[k] - costs[k]}"
+                           for k in costs if rcost[k] > costs[k]) or "无"
+        hint = (f"\n回复：1 确认　2 取消"
+                + (f"　3 ⚡加急（多付 {rextra}，立即完成）"
+                   if _gov.rush_enabled(self.cfg) else ""))
         return (f"🔧 准备{'升级' if existing else '建造'}【{bname} Lv{target_lv}】({x},{y})\n"
                 f"消耗：钢{costs['steel']} 油{costs['oil']} 资金{costs['money']}\n"
-                f"工时 {work} tick（约 {mins//60}小时{mins%60}分）\n{bdef['desc']}\n"
-                f"回复：1 确认　2 取消")
+                f"工时 {work} tick（约 {_gov.fmt_mins(mins)}）\n{bdef['desc']}"
+                f"{hint}")
+
+    async def rush_cmd(self, ctx: Ctx) -> str:
+        """加急：花额外资源立即完成已排队的建造/生产/研究（给时间不多的玩家）。"""
+        from . import gov as _gov
+        if not self._player(ctx.qq):
+            return "❌ 先 /nw注册"
+        snap = _gov.queue_snapshot(self.conn, self.cfg, ctx.qq)
+        if not snap.get("ok"):
+            return "❌ 查询失败"
+        if not _gov.rush_enabled(self.cfg):
+            return "❌ 本服未开启加急"
+        allq = ([("建造", b) for b in snap["builds"]]
+                + [("生产", p) for p in snap["productions"]]
+                + [("研究", r) for r in snap["researches"]])
+        if not ctx.args:
+            if not allq:
+                return "📭 没有正在排队的项目，无需加急。"
+            out = [f"⚡ 可加急的项目（多付 {int((_gov.rush_mult(self.cfg)-1)*100)}% 资源立即完成）："]
+            for kind, q in allq:
+                if kind == "研究":
+                    out.append(f"　[{kind}] #{q['id']} {q['cls_name']} T{q['tier']}"
+                               f"　剩 {q['left_text']}　加急费 科研{q['extra']['science']}")
+                else:
+                    nm = q["name"] + (f" Lv{q['target_lv']}" if "target_lv" in q else
+                                      f" ×{q.get('qty',1)}")
+                    out.append(f"　[{kind}] #{q['id']} {nm}　剩 {q['left_text']}"
+                               f"　加急费 {q['extra_text']}")
+            out.append("")
+            out.append("加急：/nw加急 <编号>　或 /nw加急 建造|生产|研究 <编号>")
+            return "\n".join(out)
+        kind, qid = None, None
+        if len(ctx.args) == 1:
+            try:
+                qid = int(ctx.args[0].lstrip("#"))
+            except (TypeError, ValueError):
+                return "❌ 编号应为数字。用法：/nw加急 <编号>"
+            for k, q in allq:
+                if q["id"] == qid:
+                    kind = {"建造": "build", "生产": "production",
+                            "研究": "research"}[k]
+                    break
+            if kind is None:
+                return f"❌ 队列里没有 #{qid}"
+        else:
+            kmap = {"建造": "build", "生产": "production", "研究": "research"}
+            kind = kmap.get(ctx.args[0])
+            if not kind:
+                return "❌ 类型应为 建造/生产/研究。用法：/nw加急 建造 <编号>"
+            try:
+                qid = int(ctx.args[1].lstrip("#"))
+            except (TypeError, ValueError):
+                return "❌ 编号应为数字"
+        ok, text = _gov.rush_queue(self.conn, self.cfg, ctx.qq, kind, qid)
+        return text
 
     async def queue(self, ctx: Ctx) -> str:
         p = self._player(ctx.qq)
@@ -785,6 +839,7 @@ class GameCommands:
         return "\n".join(lines)
 
     async def assemble(self, ctx: Ctx) -> str:
+        from . import gov as _gov
         if not self._player(ctx.qq):
             return "❌ 先 /nw注册"
         st = self.dstore.get(ctx.origin, ctx.qq) if self.dstore else None
@@ -813,10 +868,13 @@ class GameCommands:
             return f"❌ 无法识别或超出目录范围的编号：{'、'.join(bad)}（当前目录 1~{len(catalog)}）"
         if not picks:
             return "❌ 请至少填 1 个模块编号（船体必选）"
+        # 拥有状态必须现查——catalog 是「浏览目录那一刻」的快照，
+        # 玩家很可能看完目录又去抽了几发蓝图，用快照会误报「还未拥有」。
+        owned_now = pools.owned_ids(self.conn, ctx.qq)
         chosen, seen_slot = {}, set()
         for n in picks:
             e = catalog[n - 1]
-            if not e["owned"]:
+            if e["id"] not in owned_now:
                 info = pools.module_info(e["id"])
                 return (f"❌ 编号{n}【{info['name']}】还未拥有（🔒），"
                         f"先 /nw研究 {self.mc['classes'][cls]['name']} T{info['tier']} 抽蓝图")
@@ -844,7 +902,7 @@ class GameCommands:
         return (f"📐 方案预览【{name}】{self.mc['classes'][cls]['name']} T{preview['tier']}\n"
                 f"配槽：{mods_text}\n{pools.stats_text(preview['stats'])}\n"
                 f"单舰造价：{_cost_text(preview['cost'])}\n"
-                f"单舰工时：约 {mins//60}h{mins%60}m\n"
+                f"单舰工时：约 {_gov.fmt_mins(mins)}\n"
                 f"回复：1 保存设计　2 取消（仍在设计模式内，可继续组装其他方案）")
 
     async def design_list(self, ctx: Ctx) -> str:
@@ -916,9 +974,16 @@ class GameCommands:
                          {"type": "produce", "design_id": d["id"], "qty": qty,
                           "x": x, "y": y, "cost": cost, "end_tick": econ_tick + work})
         mins = work * self.cfg["tick"]["economic_min"]
+        from . import gov as _gov
+        hint = "\n回复：1 确认　2 取消"
+        if _gov.rush_enabled(self.cfg):
+            rc = _gov._rush_cost(self.cfg, cost)
+            extra = "、".join(f"{RES_NAME[k]}{rc[k] - cost[k]}"
+                              for k in cost if rc.get(k, 0) > cost[k]) or "无"
+            hint += f"　3 ⚡加急（多付 {extra}，立即下水）"
         return (f"🚢 准备在 ({x},{y}) 船坞建造【{d['name']}】×{qty}\n"
-                f"消耗：{_cost_text(cost)}\n工时 {work} tick（约 {mins//60}小时{mins%60}分）\n"
-                f"回复：1 确认　2 取消")
+                f"消耗：{_cost_text(cost)}\n工时 {work} tick（约 {_gov.fmt_mins(mins)}）"
+                f"{hint}")
 
     async def shipyard(self, ctx: Ctx) -> str:
         p = self._player(ctx.qq)
@@ -2783,28 +2848,18 @@ class GameCommands:
         return "回复 1 / 2 / 3 选择"
 
     def _action_build(self, ctx: Ctx, action: dict, choice: str) -> str:
+        from . import gov as _gov
         if choice == "2":
             self.confirm.drop(ctx.origin, ctx.qq)
             return "已取消。"
-        if choice != "1":
-            return "回复 1 确认　2 取消"
-        p = self._player(ctx.qq)
-        c = action["costs"]
-        if p["steel"] < c["steel"] or p["oil"] < c["oil"] or p["money"] < c["money"]:
-            self.confirm.drop(ctx.origin, ctx.qq)
-            return "❌ 资源已不足，报价失效。"
-        self.conn.execute(
-            "UPDATE players SET steel=steel-?,oil=oil-?,money=money-? WHERE qq=?",
-            (c["steel"], c["oil"], c["money"], ctx.qq))
-        self.conn.execute(
-            "INSERT INTO build_queue(qq,origin,x,y,def_id,target_level,start_tick,end_tick)"
-            " VALUES(?,?,?,?,?,?,?,?)",
-            (ctx.qq, ctx.origin, action["x"], action["y"], action["def_id"],
-             action["target_lv"], meta_get(self.conn, "econ_tick", int, 0), action["end_tick"]))
-        self.conn.commit()
+        if choice not in ("1", "3"):
+            return "回复 1 确认　2 取消　3 加急（多付资源立即完成）"
         self.confirm.drop(ctx.origin, ctx.qq)
-        bname = self.cfg["buildings"][action["def_id"]]["name"]
-        return f"✅【{bname} Lv{action['target_lv']}】已入队，完成后自动推送。/nw队列 查看"
+        rush = (choice == "3")
+        # 确认时按当前状态重新校验并执行（资源/队列/槽位可能已变）
+        ok, text = _gov.do_build(self.conn, self.cfg, ctx.qq, ctx.origin,
+                                 action["def_id"], action["x"], action["y"], rush)
+        return text
 
     def _action_starter(self, ctx: Ctx, choice: str) -> str:
         if choice not in ("1", "2"):
@@ -2946,13 +3001,22 @@ class GameCommands:
         return f"✅ 设计【{action['name']}】已保存！/nw生产 {action['name']} <数量> 下船台"
 
     def _action_produce(self, ctx: Ctx, action: dict, choice: str) -> str:
+        from . import gov as _gov
         if choice == "2":
             self.confirm.drop(ctx.origin, ctx.qq)
             return "已取消。"
-        if choice != "1":
-            return "回复 1 确认　2 取消"
+        if choice not in ("1", "3"):
+            return "回复 1 确认　2 取消" + (
+                "　3 加急（多付资源立即下水）" if _gov.rush_enabled(self.cfg) else "")
+        rush = (choice == "3")
         p = self._player(ctx.qq)
-        miss = _missing_res(p, action["cost"])
+        cost = dict(action["cost"])
+        if rush:
+            if not _gov.rush_enabled(self.cfg):
+                self.confirm.drop(ctx.origin, ctx.qq)
+                return "❌ 本服未开启加急"
+            cost = _gov._rush_cost(self.cfg, cost)
+        miss = _missing_res(p, cost)
         if miss:
             self.confirm.drop(ctx.origin, ctx.qq)
             return "❌ 资源已不足：缺 " + "、".join(miss)
@@ -2962,16 +3026,32 @@ class GameCommands:
         if active >= yard:
             self.confirm.drop(ctx.origin, ctx.qq)
             return "❌ 船台刚被占满，报价失效。"
-        self._deduct(ctx.qq, action["cost"])
+        self._deduct(ctx.qq, cost)
+        d = self.conn.execute("SELECT id,name,tier,cost_json,stats_json FROM designs"
+                              " WHERE id=?", (action["design_id"],)).fetchone()
+        tick = meta_get(self.conn, "econ_tick", int, 0)
+        if rush:
+            # 立即下水：直接生成舰船实例，不进队列
+            stats = json.loads(d["stats_json"] or "{}")
+            hp = stats.get("hp", 0)
+            snap = json.dumps({"stats": stats,
+                               "cost": json.loads(d["cost_json"] or "{}")},
+                              ensure_ascii=False)
+            for _ in range(max(1, action["qty"])):
+                self.conn.execute(
+                    "INSERT INTO ships(qq,fleet_id,def_id,name,tier,hp,max_hp,data_json)"
+                    " VALUES(?,?,?,?,?,?,?,?)",
+                    (ctx.qq, None, str(d["id"]), d["name"], d["tier"], hp, hp, snap))
+            self.conn.commit()
+            self.confirm.drop(ctx.origin, ctx.qq)
+            return f"⚡【{d['name']}】×{action['qty']} 加急下水！已入港，可编入舰队。"
         self.conn.execute(
             "INSERT INTO production_queue(qq,origin,x,y,design_id,qty,start_tick,end_tick)"
             " VALUES(?,?,?,?,?,?,?,?)",
             (ctx.qq, ctx.origin, action["x"], action["y"], action["design_id"],
-             action["qty"], meta_get(self.conn, "econ_tick", int, 0), action["end_tick"]))
+             action["qty"], tick, action["end_tick"]))
         self.conn.commit()
         self.confirm.drop(ctx.origin, ctx.qq)
-        d = self.conn.execute("SELECT name FROM designs WHERE id=?",
-                              (action["design_id"],)).fetchone()
         return f"🚢【{d['name']}】×{action['qty']} 已上船台，完工自动推送。/nw船坞 查看"
 
     # ---------- 共用工具 ----------

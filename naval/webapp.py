@@ -307,6 +307,72 @@ class NavalWeb:
                 return err("未登录", 401)
             return {"ok": True, "events": self.push_buffer.drain(qq)}
 
+        # ---------- 图形化内政：建造 / 加急（不敲指令也能玩） ----------
+        @app.get("/api/build_options")
+        async def build_options(request: Request, x: int = None, y: int = None):
+            qq = self._qq_from_request(request)
+            if not qq:
+                return err("未登录", 401)
+            from . import gov as _gov
+
+            d = _gov.build_options(self.conn, self.cfg, qq, x, y)
+            if not d.get("ok"):
+                return err(d.get("reason", "查询失败"), 404)
+            return d
+
+        @app.get("/api/queues")
+        async def queues(request: Request):
+            qq = self._qq_from_request(request)
+            if not qq:
+                return err("未登录", 401)
+            from . import gov as _gov
+
+            return _gov.queue_snapshot(self.conn, self.cfg, qq)
+
+        @app.post("/api/build")
+        async def build(request: Request, payload: dict = Body(...)):
+            qq = self._qq_from_request(request)
+            if not qq:
+                return err("未登录", 401)
+            from . import gov as _gov
+
+            def_id = str(payload.get("def_id", ""))
+            x, y = payload.get("x"), payload.get("y")
+            rush = bool(payload.get("rush"))
+            try:
+                ok, text = _gov.do_build(self.conn, self.cfg, qq,
+                                         f"web:{qq}", def_id, x, y, rush)
+            except Exception as e:
+                logger.exception("[海战模拟器][Web] 建造异常")
+                return err(f"建造失败：{type(e).__name__}", 500)
+            if not ok:
+                return err(text.lstrip("❌ "))
+            return {"ok": True, "text": text,
+                    "options": _gov.build_options(self.conn, self.cfg, qq, x, y),
+                    "queues": _gov.queue_snapshot(self.conn, self.cfg, qq)}
+
+        @app.post("/api/rush")
+        async def rush(request: Request, payload: dict = Body(...)):
+            qq = self._qq_from_request(request)
+            if not qq:
+                return err("未登录", 401)
+            from . import gov as _gov
+
+            kind = str(payload.get("kind", ""))
+            try:
+                qid = int(payload.get("id"))
+            except (TypeError, ValueError):
+                return err("id 应为数字")
+            try:
+                ok, text = _gov.rush_queue(self.conn, self.cfg, qq, kind, qid)
+            except Exception as e:
+                logger.exception("[海战模拟器][Web] 加急异常")
+                return err(f"加急失败：{type(e).__name__}", 500)
+            if not ok:
+                return err(text.lstrip("❌ "))
+            return {"ok": True, "text": text,
+                    "queues": _gov.queue_snapshot(self.conn, self.cfg, qq)}
+
         # ---------- 图形化数据 ----------
         @app.get("/api/map")
         async def map_data(request: Request, radius: int = 10,

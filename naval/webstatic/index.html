@@ -175,6 +175,10 @@
       <div class="list" id="battleView"></div>
     </div>
 
+    <div class="pane" id="pane-build">
+      <div class="list" id="buildList"></div>
+    </div>
+
     <div class="pane" id="pane-assets">
       <div class="list" id="assetList"></div>
       <div class="list" id="codexList"></div>
@@ -253,9 +257,9 @@ function renderPlayer(p){
 }
 
 /* ---------- 标签页 ---------- */
-const TABS = [['map','🗺 海图'],['fleet','⚓ 舰队'],['assets','📦 势力'],
-              ['tech','🔬 科技'],['diplo','🕊 外交'],['battle','🎬 战报'],
-              ['cmd','💬 指令']];
+const TABS = [['map','🗺 海图'],['build','🏗 建造'],['fleet','⚓ 舰队'],
+              ['assets','📦 势力'],['tech','🔬 科技'],['diplo','🕊 外交'],
+              ['battle','🎬 战报'],['cmd','💬 指令']];
 let curTab = 'map';
 function buildTabs(){
   if ($('tabs').children.length) return;
@@ -272,8 +276,140 @@ function switchTab(k){
   [...$('tabs').children].forEach(b => b.classList.toggle('on', b.dataset.k === k));
   TABS.forEach(([t]) => $('pane-'+t).classList.toggle('on', t === k));
   if (k === 'map') loadMap();
+  if (k === 'build') loadBuild();
   if (k === 'fleet' || k === 'assets' || k === 'diplo' || k === 'tech') loadAssets();
   if (k === 'battle') loadBattles();
+}
+
+/* ---------- 图形化建造 ---------- */
+let buildData = null, buildIsland = null;
+async function loadBuild(){
+  const box = $('buildList');
+  box.innerHTML = '<div class="empty">载入中…</div>';
+  try {
+    let url = '/api/build_options';
+    if (buildIsland) url += '?x=' + buildIsland[0] + '&y=' + buildIsland[1];
+    const d = await api(url);
+    buildData = d;
+    if (!buildIsland) buildIsland = [d.x, d.y];
+    renderBuild(d);
+  } catch(e){
+    box.innerHTML = '<div class="empty">建造面板加载失败：'+esc(e.message)+'</div>';
+  }
+}
+function renderBuild(d){
+  const box = $('buildList');
+  const out = [];
+  out.push('<div class="item"><b>🏗 '+esc(d.island)+' ('+d.x+','+d.y+')</b>'
+    + '　岛级 D'+d.dev_level
+    + '　槽位 <b>'+d.slots_used+'/'+d.slots_total+'</b>'
+    + '<div class="sub">点「建造」下单；赶时间可点「⚡加急」多花资源立即完成'
+    + '（本服加急倍率 ×'+d.rush_mult+'）</div></div>');
+  // 分两组：可建 / 不可建
+  const can = d.buildings.filter(b => b.can_build);
+  const cannot = d.buildings.filter(b => !b.can_build);
+  const rowHtml = (b) => {
+    const maxed = b.maxed;
+    const pct = Math.round(b.level / b.max_lv * 100);
+    let costTxt = '';
+    if (!maxed){
+      const c = b.cost;
+      costTxt = [['钢', c.steel], ['油', c.oil], ['资金', c.money]]
+        .filter(([, v]) => v).map(([k, v]) => k + v).join(' ');
+      if (b.rush_cost){
+        const ex = [['钢', b.rush_cost.steel - c.steel], ['油', b.rush_cost.oil - c.oil],
+                    ['资金', b.rush_cost.money - c.money]]
+          .filter(([, v]) => v).map(([k, v]) => k + v).join(' ');
+        costTxt += '　⚡加急+'+ (ex || '0');
+      }
+    }
+    const why = maxed ? '已满级'
+      : (b.blocked ? '<span style="color:#f5b942">'+esc(b.blocked)+'</span>'
+        : (!b.affordable ? '<span style="color:#f2555a">缺 '+esc(b.missing.join('、'))+'</span>'
+          : '<span style="color:#25d0a5">可建</span>'));
+    const btns = maxed ? '' :
+      '<button class="ghost" data-b="'+b.def_id+'" data-r="0"'
+      + (b.can_build ? '' : ' disabled') + '>建造</button>'
+      + (d.rush_enabled ? '<button class="ghost" data-b="'+b.def_id+'" data-r="1"'
+         + (b.can_build ? '' : ' disabled') + '>⚡加急</button>' : '');
+    return '<div class="sub" style="padding:4px 0"><b>'+esc(b.name)+'</b>'
+      + ' Lv'+b.level+'/'+b.max_lv
+      + ' <span style="display:inline-block;width:60px;height:6px;background:#22303c;'
+      + 'border-radius:3px;vertical-align:middle"><i style="display:block;height:6px;'
+      + 'width:'+pct+'%;background:#3fa9f5;border-radius:3px"></i></span>'
+      + '　'+why
+      + (costTxt ? '<br>　'+costTxt+'　工时 '+(b.work_text||'') : '')
+      + (b.production ? '　产出 '+Object.entries(b.production).map(([k,v])=>k+v).join(' ') : '')
+      + '<br>　'+esc(b.desc||'')
+      + '　'+btns+'</div>';
+  };
+  if (can.length) out.push('<div class="item"><b>可建造 / 可升级</b>'
+    + can.map(rowHtml).join('') + '</div>');
+  if (cannot.length) out.push('<div class="item"><b>暂不可建</b>'
+    + cannot.map(rowHtml).join('') + '</div>');
+  // 队列 + 加急
+  out.push('<div class="item" id="queueBox"><b>⏳ 进行中</b>'
+    + '<div class="sub">载入中…</div></div>');
+  box.innerHTML = out.join('');
+  box.querySelectorAll('button[data-b]').forEach(btn => {
+    btn.onclick = () => doBuild(btn.dataset.b, btn.dataset.r === '1');
+  });
+  loadQueues();
+}
+async function doBuild(defId, rush){
+  const b = (buildData.buildings || []).find(x => x.def_id === defId);
+  const nm = b ? b.name : defId;
+  if (!confirm((rush ? '⚡ 加急建造 ' : '建造 ') + nm + ' ？'
+      + (rush ? '\n（会多付资源，立即完成）' : ''))) return;
+  try {
+    const iso = buildIsland || [buildData.x, buildData.y];
+    const d = await api('/api/build', {method:'POST', body: JSON.stringify({
+      def_id: defId, x: iso[0], y: iso[1], rush: rush })});
+    say(d.text || '已提交', 'ok');
+    buildData = d.options; renderBuild(d.options);
+  } catch(e){ say('建造失败：'+e.message, 'err'); }
+}
+async function loadQueues(){
+  const box = $('queueBox');
+  if (!box) return;
+  try {
+    const d = await api('/api/queues');
+    const rows = [];
+    (d.builds||[]).forEach(q => rows.push({kind:'build', id:q.id,
+      label:'🏗 '+q.name+' Lv'+q.target_lv, left:q.left_text,
+      extra:q.extra_text, xy:'('+q.x+','+q.y+')'}));
+    (d.productions||[]).forEach(q => rows.push({kind:'production', id:q.id,
+      label:'🚢 '+q.name+' ×'+q.qty, left:q.left_text,
+      extra:q.extra_text, xy:'('+q.x+','+q.y+')'}));
+    (d.researches||[]).forEach(q => rows.push({kind:'research', id:q.id,
+      label:'🔬 '+q.cls_name+' T'+q.tier, left:q.left_text,
+      extra:'科研'+((q.extra||{}).science||0), xy:''}));
+    if (!rows.length){
+      box.innerHTML = '<b>⏳ 进行中</b><div class="sub">没有正在排队的项目。'
+        + '（经济每 '+d.econ_min+' 分钟结算一次）</div>';
+      return;
+    }
+    box.innerHTML = '<b>⏳ 进行中</b>' + rows.map(r =>
+      '<div class="sub">'+esc(r.label)+'　'+esc(r.xy)+'　剩 <b>'+esc(r.left)+'</b>'
+      + '　加急费 '+esc(r.extra||'0')
+      + (d.rush_enabled ? '　<button class="ghost" data-qk="'+r.kind
+         +'" data-qid="'+r.id+'">⚡立即完成</button>' : '')
+      + '</div>').join('');
+    box.querySelectorAll('button[data-qk]').forEach(btn => {
+      btn.onclick = () => doRush(btn.dataset.qk, +btn.dataset.qid);
+    });
+  } catch(e){
+    box.innerHTML = '<b>⏳ 进行中</b><div class="sub">队列加载失败：'+esc(e.message)+'</div>';
+  }
+}
+async function doRush(kind, id){
+  if (!confirm('⚡ 花额外资源立即完成这一项？')) return;
+  try {
+    const d = await api('/api/rush', {method:'POST',
+      body: JSON.stringify({kind: kind, id: id})});
+    say(d.text || '已加急', 'ok');
+    loadBuild(); loadAssets();
+  } catch(e){ say('加急失败：'+e.message, 'err'); }
 }
 
 /* ---------- 海图 ---------- */
