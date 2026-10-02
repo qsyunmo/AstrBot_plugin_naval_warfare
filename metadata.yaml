@@ -1,0 +1,8 @@
+# Plugin Metadata for naval_warfare
+name: naval_warfare
+version: 0.1.0
+author: local
+description: "海战模拟器：/nw 或 /海战 为前缀的 QQ 文字海战策略游戏（单入口路由、20分钟经济tick、抽卡造舰、破交封锁）"
+min_astrbot_version: "4.20.0"
+support_platforms:
+  - aiocqhttp

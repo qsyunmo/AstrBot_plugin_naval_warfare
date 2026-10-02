@@ -1,0 +1,98 @@
+{
+  "_comment": "海战模拟器全局平衡配置（P0 占位，数值按文档§18.10锚点后续调校，改数不动代码）",
+  "world": { "map_size": 1000, "seed": 20261001 },
+  "tick": { "economic_min": 20, "war_min": 2, "loop_seconds": 10 },
+  "spawn": {
+    "min_dist": 15, "max_dist": 30, "max_tries": 300, "allow_reroll": true,
+    "capital_ore_min": 3
+  },
+  "start_package": {
+    "resources": {
+      "steel": 800, "oil": 200, "aluminium": 0, "rare_earth": 0, "chips": 0,
+      "food": 500, "supply": 200, "manpower": 300, "money": 1000,
+      "science": 0, "intel": 0
+    },
+    "buildings": [["governor", 1]],
+    "blueprints_note": "护卫舰全套T1+运输船T1（研究系统实装后发）"
+  },
+  "ore_rich_mult": [0.4, 0.7, 1.0, 1.3, 1.6],
+  "island_types": {
+    "continental": { "name": "大陆岛", "slots": 8, "d_max": 10, "spawn_weight": 3, "can_spawn": true,
+      "ore_table": {"iron": [2,4], "oil": [0,2], "aluminium": [0,2]}, "fishery": false, "hp": 600 },
+    "volcanic":    { "name": "火山岛", "slots": 5, "d_max": 10, "spawn_weight": 6, "can_spawn": true,
+      "ore_table": {"iron": [3,5], "aluminium": [0,3]}, "fishery": false, "hp": 420, "land_def": 0.3 },
+    "hilly":       { "name": "丘陵岛", "slots": 5, "d_max": 8,  "spawn_weight": 10, "can_spawn": true,
+      "ore_table": {"iron": [1,3], "aluminium": [0,3]}, "fishery": false, "hp": 380 },
+    "alluvial":    { "name": "冲积岛", "slots": 6, "d_max": 8,  "spawn_weight": 6, "can_spawn": true,
+      "ore_table": {}, "fishery": true, "fishery_rich": [3,5], "hp": 300 },
+    "coral":       { "name": "珊瑚岛", "slots": 2, "d_max": 6,  "spawn_weight": 12, "can_spawn": false,
+      "ore_table": {}, "fishery": true, "fishery_rich": [1,3], "hp": 200, "land_def": 0.4 },
+    "rock":        { "name": "岩岛",   "slots": 3, "d_max": 7,  "spawn_weight": 10, "can_spawn": false,
+      "ore_table": {"iron": [1,2], "aluminium": [0,2]}, "fishery": false, "hp": 260 }
+  },
+  "cost_tiers": {
+    "1": { "steel": 50,  "oil": 0,   "money": 100,  "work": 4 },
+    "2": { "steel": 150, "oil": 20,  "money": 300,  "work": 10 },
+    "3": { "steel": 400, "oil": 80,  "money": 800,  "work": 24 },
+    "4": { "steel": 1000,"oil": 300, "money": 2000, "work": 60 },
+    "5": { "steel": 2500,"oil": 800, "money": 5000, "work": 150 }
+  },
+  "buildings": {
+    "governor":     { "name": "总督府", "max_lv": 10, "unique": true, "cost_special": "governor",
+                      "desc": "岛级D载体；+行政容量；占岛自动立临时总督府" },
+    "mine":         { "name": "矿场", "max_lv": 5, "tier_cost": true, "need_ore": "iron",
+                      "production": { "steel": 60 }, "desc": "开采铁矿，日产随富度" },
+    "oil_well":     { "name": "油井", "max_lv": 5, "tier_cost": true, "need_ore": "oil",
+                      "production": { "oil": 40 }, "desc": "开采石油" },
+    "fishery":      { "name": "渔场码头", "max_lv": 5, "tier_cost": true, "need_fishery": true,
+                      "production": { "food": 70 }, "desc": "食物产出" },
+    "warehouse":    { "name": "仓库", "max_lv": 5, "tier_cost": true,
+                      "desc": "资源储存上限（P1实装容量）" },
+    "shipyard":     { "name": "造船厂", "max_lv": 5, "tier_cost": true,
+                      "desc": "造船/修理；船台数=等级，支持并行排产（/nw生产）" },
+    "lab":          { "name": "研究所", "max_lv": 5, "tier_cost": true,
+                      "production": { "science": 10 },
+                      "desc": "Lv1~5 开放 T1~T5 蓝图池；并行研究位 1/1/2/2/3" },
+    "proving_ground": { "name": "试验场", "max_lv": 5, "tier_cost": true,
+                      "desc": "每级普通研究时长 -10%（最低约3.5分钟）" },
+    "naval_base":   { "name": "海军基地", "max_lv": 5, "tier_cost": true,
+                      "desc": "停泊/修理/补给航程起点（P1实装）" },
+    "coastal_gun_s":{ "name": "小口径岸炮台", "max_lv": 3, "tier_cost": true,
+                      "desc": "自动射击近岸轻型舰船（战斗实装生效）" },
+    "garrison":     { "name": "守备队营房", "max_lv": 5, "tier_cost": true,
+                      "production_manpower_note": "+控制度增长/岛屿HP", "desc": "驻屯守备队，反登陆" },
+    "radar":        { "name": "雷达站", "max_lv": 3, "tier_cost": true, "min_dev": 4,
+                      "desc": "海域视野+15格、夜战预警" }
+  },
+  "confirm": { "timeout_sec": 60 },
+  "ratelimit": { "window_sec": 5, "max_cmds": 3, "query_cooldown_sec": 1 },
+  "combat": {
+    "_comment": "P2a 简化战斗（§19.2 最小版，同格接敌、每战争tick一轮）",
+    "hit_base": 0.75, "hit_per_fc": 0.004, "hit_speed_penalty": 0.0015,
+    "hit_min": 0.10, "hit_max": 0.95,
+    "speed_divisor": 12,
+    "retreat_rounds": 1
+  },
+  "fleet": {
+    "_comment": "P2a 娱乐尺度：每战争tick(2分钟)移动格数=max(1,round(航速/cells_per_speed))；P2b再按节速修正",
+    "cells_per_speed": 8,
+    "move_oil_per_ship_cell": 2,
+    "retreat_nudge_cells": 4
+  },
+  "pirate": {
+    "_comment": "P2a 海盗野怪（§25.1 L1~3）。注册时在首都外围生成1据点+1巡逻队",
+    "spawn_min": 22, "spawn_max": 45,
+    "wander_radius": 10, "flee_dist": 6,
+    "respawn_war_ticks": 60,
+    "loot": {
+      "1": { "steel": 100, "money": 80 },
+      "2": { "steel": 200, "money": 150 },
+      "3": { "steel": 350, "money": 300 }
+    },
+    "patrols": {
+      "1": [["frigate", 1, 2]],
+      "2": [["frigate", 1, 2], ["destroyer", 1, 1]],
+      "3": [["frigate", 1, 2], ["destroyer", 1, 1], ["ss_attack", 1, 1]]
+    }
+  }
+}

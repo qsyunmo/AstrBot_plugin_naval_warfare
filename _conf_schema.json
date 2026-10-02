@@ -1,0 +1,17 @@
+{
+  "admins": {
+    "description": "管理员 QQ 号列表（/nw管理 指令）",
+    "type": "list",
+    "default": []
+  },
+  "respond_private": {
+    "description": "私聊是否响应 /nw 指令",
+    "type": "bool",
+    "default": true
+  },
+  "quiet_hours": {
+    "description": "免打扰时段 [开始,结束]，仅推送岛屿易主/主力舰损失",
+    "type": "list",
+    "default": [23, 8]
+  }
+}
