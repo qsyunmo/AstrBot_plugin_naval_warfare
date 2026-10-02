@@ -14,6 +14,9 @@ from .db import meta_get, meta_set
 
 TICKS_PER_DAY = 24 * 3  # 经济 tick 20 分钟 → 每天 72 tick
 
+# Web 版会话的 origin 前缀：这类推送没有 QQ 会话可发，改投缓冲等网页轮询
+WEB_ORIGIN_PREFIX = "web:"
+
 
 def _building_output(conn, cfg: dict, b, island_row):
     """建筑在当前等级的日产 dict（已乘矿床富度系数）。"""
@@ -134,8 +137,9 @@ def settle_war(conn, cfg: dict) -> list:
 
 
 class GameEngine:
-    def __init__(self, conn, cfg: dict, context):
+    def __init__(self, conn, cfg: dict, context, push_buffer=None):
         self.conn, self.cfg, self.context = conn, cfg, context
+        self.push_buffer = push_buffer   # Web 用户推送缓冲（可为 None）
         self._task = None
 
     def start(self):
@@ -148,6 +152,11 @@ class GameEngine:
 
     async def _push(self, origin: str, text: str):
         if not origin:
+            return
+        # Web 会话没有 QQ 可发：投进缓冲，等网页轮询取走
+        if str(origin).startswith(WEB_ORIGIN_PREFIX):
+            if self.push_buffer is not None:
+                self.push_buffer.add(origin, text)
             return
         try:
             from astrbot.api.event import MessageChain

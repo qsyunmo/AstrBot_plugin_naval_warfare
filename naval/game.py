@@ -10,14 +10,14 @@ import re
 import time
 from dataclasses import dataclass
 
-from . import spawn, pools, research, fleet as fleetm, aiworld, combat
+from . import spawn, pools, research, fleet as fleetm, aiworld, combat, webauth
 from .db import meta_get
 
 PREFIX_HINT = "前缀 /nw（或 /海战）"
 
 # 指令表：命令名 → (方法名, 是否开放, 别名, 简介)
 COMMANDS = {
-    "注册": ("register", True, [], "开局注册势力"),
+    "注册": ("register", True, [], "开局注册势力 <名称> [Web口令]"),
     "帮助": ("help", True, ["菜单"], "查看指令表"),
     "我": ("status", True, ["状态", "状态卡"], "势力状态卡"),
     "资源": ("resources", True, ["仓"], "查看资源库存"),
@@ -111,20 +111,42 @@ class GameCommands:
 
     # ---------- 账号 ----------
     async def register(self, ctx: Ctx) -> str:
-        name = " ".join(ctx.args).strip() or ctx.nick or ctx.qq
+        """注册：/nw注册 <名称> [密码]
+
+        密码可选。留空则账号没有 Web 口令，首次进 Web 时会被引导设置。
+        """
+        args = [a for a in ctx.args if a and a.strip()]
+        name = (args[0].strip() if args else "") or ctx.nick or ctx.qq
         name = name[:12]
+        password = args[1].strip() if len(args) > 1 else ""
+        if password:
+            pw_err = webauth.check_password_strength(password)
+            if pw_err:
+                return f"❌ Web 口令不合格：{pw_err}"
+
         result, err = spawn.create_capital(self.conn, self.cfg, ctx.qq, name)
         if err:
             return f"❌ {err}"
         player, isl = result
+
+        if password:
+            self.conn.execute(
+                "UPDATE players SET web_pass=?, web_pass_at=? WHERE qq=?",
+                (webauth.hash_password(password), int(time.time()), ctx.qq))
+            self.conn.commit()
+
         ore = json.loads(isl["ore_json"])
         action = {"type": "register", "can_reroll": self.cfg["spawn"]["allow_reroll"]}
         self.confirm.put(ctx.origin, ctx.qq, action)
         others = self.conn.execute("SELECT COUNT(*) c FROM players WHERE qq!=?", (ctx.qq,)).fetchone()["c"]
+        web_line = ("🔑 Web 口令已设置，可用 QQ 号登录网页版"
+                    if password else
+                    "🔑 未设置 Web 口令，首次登录网页版时会引导你设置")
         return (f"🌊 欢迎，提督【{name}】！\n"
                 f"出生岛：({isl['x']},{isl['y']}) {_island_name(self.cfg, isl['itype'])}"
                 f"｜{_ore_text(ore)}｜槽位 {self.cfg['island_types'][isl['itype']]['slots']}+D\n"
                 f"🎁 新手包：钢800 油200 食物500 资金1000 + 总督府Lv1\n"
+                f"{web_line}\n"
                 f"🌍 当前海域已有 {others} 股势力\n"
                 f"回复：1 看新手引导　2 直接开始　3 重掷出生点（仅1次）")
 

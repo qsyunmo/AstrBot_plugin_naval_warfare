@@ -13,5 +13,20 @@
     "description": "免打扰时段 [开始,结束]，仅推送岛屿易主/主力舰损失",
     "type": "list",
     "default": [23, 8]
+  },
+  "web_enable": {
+    "description": "启用 Web 版（插件进程内起 HTTP 服务）",
+    "type": "bool",
+    "default": true
+  },
+  "web_port": {
+    "description": "Web 版端口（需在 docker-compose 里映射出去）",
+    "type": "int",
+    "default": 8090
+  },
+  "web_host": {
+    "description": "Web 版监听地址，0.0.0.0 表示允许外部访问",
+    "type": "string",
+    "default": "0.0.0.0"
   }
 }

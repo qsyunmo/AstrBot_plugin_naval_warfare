@@ -1,0 +1,15 @@
+feat(web): 海战模拟器 Web 版 + 注册口令
+
+新增浏览器入口，复用同一套引擎与 SQLite，游戏逻辑零改动。
+
+- naval/router.py：命令解析抽成 AstrBot 无关模块，QQ 侧 main.py 与
+  Web 侧 webapp.py 共用同一个 Router，杜绝两边行为漂移
+- naval/webapp.py：FastAPI/uvicorn 跑在插件进程内（同一事件循环），
+  与 QQ 侧共享 conn / 确认会话 / 设计模式会话；Web 用户到期推送
+  缓冲到 WebPushBuffer 供网页轮询
+- naval/webauth.py：pbkdf2_sha256 口令散列 + 内存态会话
+- naval/webstatic/index.html：单文件界面，移动端自适应
+- 注册指令改为 /nw注册 <名称> [Web口令]；口令留空的账号可登录，
+  但会被强制引导设置后才能操作
+- players 表迁移新增 web_pass / web_pass_at
+- engine._push 对 web: 前缀的 origin 改投缓冲，不再尝试发 QQ 消息

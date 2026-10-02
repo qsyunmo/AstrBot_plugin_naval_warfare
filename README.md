@@ -12,7 +12,7 @@ AstrBot（OneBot/NapCat）内置插件：QQ 群/私聊里的纯文字海战策�
 
 ## 玩法概览
 
-1. `/nw注册 <势力名>` 出生在距现有首都 15~30 格的环带，roll 岛型与矿床
+1. `/nw注册 <名称> [Web口令]` 出生在距现有首都 15~30 格的环带，roll 岛型与矿床
 2. 发展岛屿：建造矿场/油井/渔场/仓库/造船厂……经济 tick 每 20 分钟自动产出
 3. P1：研究所抽蓝图（白/蓝/紫/金 + 保底 + 碎片兑换）→ 设计舰船 → 船坞排产
 4. P2：舰队移动与多舰队交战（六阶段结算），遭遇海盗、正规军、帝国商船、雇佣船队……
@@ -25,7 +25,7 @@ AstrBot（OneBot/NapCat）内置插件：QQ 群/私聊里的纯文字海战策�
 
 | 指令 | 状态 | 说明 |
 |---|---|---|
-| `/nw注册 <势力名>` | P0 | 开局注册（出生后回复 1 引导 / 2 开始 / 3 重掷，重掷仅 1 次） |
+| `/nw注册 <名称> [Web口令]` | P0 | 开局注册；口令用于网页版登录（出生后回复 1 引导 / 2 开始 / 3 重掷，重掷仅 1 次） |
 | `/nw我` `/nw资源` `/nw岛` | P0 | 势力状态卡、资源库存、岛屿详情 |
 | `/nw建造 <建筑名>` | P0 | 建造/升级报价（校验资源/槽位/矿床/岛级/前置） |
 | `/nw队列` | P0 | 建造/研究/船坞队列与剩余时间 |
@@ -47,6 +47,81 @@ AstrBot（OneBot/NapCat）内置插件：QQ 群/私聊里的纯文字海战策�
 | `/nw驻防` `/nw护航` `/nw封锁` `/nw登陆` `/nw空袭` 等 | P2b+ | 已注册指令，当前返回开放提示 |
 
 非命令消息一律不拦截，正常走 AI 聊天；裸前缀只有后面跟已知指令时才会被认领。
+
+## Web 版
+
+同一套引擎、同一个数据库，另开一个浏览器入口。**游戏逻辑零改动**——Web 只是把命令从 QQ 消息换成 HTTP 请求。
+
+### 登录方式
+
+- **QQ 号 + Web 口令**，口令在注册时设定：`/nw注册 <名称> <口令>`
+- 口令规则：至少 4 位、不能全是数字
+- **老账号（注册时没写口令）**：仍可用 QQ 号登录，但会**被强制引导设置口令**，设好之前不能操作
+- 账号必须已在 QQ 侧注册过，未注册的 QQ 登录会被拒
+
+### 部署
+
+`docker-compose.yml` 里把端口映射出去：
+
+```yaml
+  astrbot:
+    ports:
+      - "6185:6185"
+      - "8090:8090"   # Web 版
+```
+
+插件配置（WebUI 插件页或 `_conf_schema.json`）：
+
+| 项 | 默认 | 说明 |
+|---|---|---|
+| `web_enable` | `true` | 是否在插件进程内起 HTTP 服务 |
+| `web_port` | `8090` | 监听端口，需与 compose 映射一致 |
+| `web_host` | `0.0.0.0` | 允许外部访问；改 `127.0.0.1` 则仅本机 |
+
+启动后在容器日志里应看到：
+
+```
+[海战模拟器][Web] 已启动 http://0.0.0.0:8090
+```
+
+> Web 服务跑在 **AstrBot 插件进程内**（同一个事件循环），因此与 QQ 侧共用
+> SQLite 连接和确认/设计模式会话，不存在跨进程竞态。
+
+### 公网访问（内网穿透）
+
+本机没有公网 IP 时，用 cloudflared 快速隧道（免费、免账号）：
+
+```powershell
+docker run -d --name naval-tunnel --restart unless-stopped `
+  cloudflare/cloudflared:latest tunnel --no-autoupdate `
+  --url http://host.docker.internal:8090
+docker logs naval-tunnel 2>&1 | Select-String trycloudflare
+```
+
+日志里会打印形如 `https://xxx-yyy-zzz.trycloudflare.com` 的地址，手机浏览器直接打开即可。
+
+> ⚠️ 快速隧道的域名**每次重启都会变**；需要固定域名要改用 Cloudflare 命名隧道（需账号 + 域名）。
+> ⚠️ 公网暴露前请先确认账号**已设置口令**，否则任何知道 QQ 号的人都能登录。
+
+### 接口
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `GET` | `/` | 网页界面（单文件，无构建步骤） |
+| `POST` | `/api/login` | `{qq, password}` → `{token, need_set_password, player}` |
+| `POST` | `/api/password` | 设置/修改口令（已设过需验旧口令） |
+| `GET` | `/api/me` | 势力概况 + 领地 + 各类计数 |
+| `POST` | `/api/cmd` | `{text}` → `{replies}`；不带前缀会自动补 `/nw` |
+| `GET` | `/api/events` | 取走缓存的到期推送（建造/研究完工），取后即清 |
+| `GET` | `/healthz` | 存活探针 |
+
+鉴权用 `Authorization: Bearer <token>`（也支持 `nw_token` Cookie）。会话是内存态，进程重启后需重新登录。
+
+### 为什么 QQ 和 Web 不会行为漂移
+
+命令解析（前缀判定 / 确认拦截 / 频率控制 / 未知指令提示）统一在 `naval/router.py`，
+QQ 侧 `main.py` 与 Web 侧 `naval/webapp.py` 调的是同一个 `Router`。
+两边只有"传输层"不同：QQ 发消息、Web 返回 JSON。
 
 ## 安装与部署
 
@@ -72,12 +147,17 @@ Plugin naval_warfare (0.1.0) ...
 
 ```
 naval_warfare/
-├── main.py                 # 唯一消息入口：前缀判定→确认拦截→频率限制→分发
+├── main.py                 # AstrBot 入口：归一化 → Router → 发送（非命令放行给 AI）
 ├── metadata.yaml           # 插件元数据
-├── _conf_schema.json       # WebUI 可配置项（管理员/私聊开关/免打扰时段）
-├── requirements.txt        # 无第三方依赖
+├── _conf_schema.json       # WebUI 可配置项（管理员/私聊开关/免打扰/Web 端口）
+├── requirements.txt        # 无第三方依赖（Web 版用 AstrBot 自带的 FastAPI）
 └── naval/
-    ├── db.py               # SQLite 连接(WAL)、meta 键值、建库
+    ├── router.py           # 命令路由（前缀/确认/限流/分发），QQ 与 Web 共用
+    ├── webapp.py           # Web 版：FastAPI 应用 + 推送缓冲 + 会话
+    ├── webauth.py          # Web 口令散列(pbkdf2) 与内存态会话
+    ├── webstatic/
+    │   └── index.html      # 网页界面（单文件，无构建步骤）
+    ├── db.py               # SQLite 连接(WAL)、meta 键值、建库与迁移
     ├── session.py          # 60 秒报价确认 / 设计模式会话(30分钟) / 频率限制（内存态）
     ├── spawn.py            # 出生岛 roll 点（环面 15~30 环带锚点采样）
     ├── pools.py            # 模块池加载、舰种/T 解析、整舰属性/造价/工时计算
@@ -150,7 +230,7 @@ A 1000×1000 toroidal sea map, island capture and development, T1–T5 module ga
 
 ## Gameplay overview
 
-1. `/nw注册 <faction name>` — spawn on a ring 15–30 tiles away from existing capitals; island type and ore deposits are rolled
+1. `/nw注册 <name> [web password]` — spawn on a ring 15–30 tiles away from existing capitals; island type and ore deposits are rolled
 2. Develop islands: mines / oil wells / fisheries / warehouses / shipyards… the economy tick produces automatically every 20 minutes
 3. P1: the research lab draws blueprints (white / blue / purple / gold + pity + shard exchange) → design ships → dock production
 4. P2: fleet movement and multi-fleet combat (six-phase resolution); encounters with pirates, regulars, imperial merchantmen, mercenary flotillas…
@@ -163,7 +243,7 @@ Paid actions return a quote first — reply `1` within 60 seconds to confirm, `2
 
 | Command | Stage | Description |
 |---|---|---|
-| `/nw注册 <faction name>` | P0 | Register to start (after spawning, reply 1 to guide / 2 to start / 3 to reroll; only 1 reroll) |
+| `/nw注册 <name> [web password]` | P0 | Register to start. The password is used to sign in to the **web version** (after spawning: 1 guide / 2 start / 3 reroll; only 1 reroll) |
 | `/nw我` `/nw资源` `/nw岛` | P0 | Faction status card, resource stockpile, island details |
 | `/nw建造 <building name>` | P0 | Build / upgrade quote (validates resources, slots, ore deposit, island tier, prerequisites) |
 | `/nw队列` | P0 | Build / research / dock queues and remaining time |
@@ -185,6 +265,30 @@ Paid actions return a quote first — reply `1` within 60 seconds to confirm, `2
 | `/nw驻防` `/nw护航` `/nw封锁` `/nw登陆` `/nw空袭` etc. | P2b+ | Registered commands; currently return a "not yet open" notice |
 
 Non-command messages are never intercepted — they go to normal AI chat. A bare prefix is only claimed when a known command follows it.
+
+## Web version
+
+The same engine and the same database, exposed through a browser. **Game logic is unchanged** — the web layer only swaps the transport from QQ messages to HTTP.
+
+- Sign in with **QQ number + web password** (set at registration: `/nw注册 <name> <password>`)
+- Password rules: at least 4 characters, not all digits
+- **Legacy accounts** (registered without a password) can still sign in with just the QQ number, but are **forced to set a password** before doing anything
+- The account must already be registered on the QQ side
+
+Deployment: map port `8090` in `docker-compose.yml` (see `_conf_schema.json` for `web_enable` / `web_port` / `web_host`). The HTTP service runs **inside the AstrBot plugin process**, so it shares the SQLite connection and the confirmation / design-mode sessions with the QQ side — no cross-process races.
+
+For public access without a public IP, a cloudflared quick tunnel works with no account:
+
+```powershell
+docker run -d --name naval-tunnel --restart unless-stopped `
+  cloudflare/cloudflared:latest tunnel --no-autoupdate `
+  --url http://host.docker.internal:8090
+```
+
+> ⚠️ A quick-tunnel hostname changes on every restart. A stable domain needs a named Cloudflare tunnel (account + domain).
+> ⚠️ Make sure the account has a password set **before** exposing it publicly.
+
+Command parsing lives in `naval/router.py` and is shared by `main.py` (QQ) and `naval/webapp.py` (web), so the two can never drift apart.
 
 ## Installation
 
@@ -224,7 +328,7 @@ Plugin naval_warfare (0.1.0) ...
 
 ## Обзор игры
 
-1. `/nw注册 <название фракции>` — старт: вы появляетесь на кольце в 15–30 клетках от существующих столиц; тип острова и залежи руды определяются случайно
+1. `/nw注册 <имя> [пароль для веба]` — старт: вы появляетесь на кольце в 15–30 клетках от существующих столиц; тип острова и залежи руды определяются случайно
 2. Развитие островов: шахты / нефтяные вышки / рыбные промыслы / склады / верфи… экономический тик производит ресурсы автоматически каждые 20 минут
 3. P1: исследовательская лаборатория тянет чертежи (белый / синий / фиолетовый / золотой + гарантия + обмен осколков) → проектирование кораблей → производство в доке
 4. P2: перемещение флотов и сражения нескольких флотов (разрешение в шесть фаз); встречи с пиратами, регулярными силами, имперскими торговыми судами, наёмными флотилиями…
@@ -237,7 +341,7 @@ Plugin naval_warfare (0.1.0) ...
 
 | Команда | Этап | Описание |
 |---|---|---|
-| `/nw注册 <название фракции>` | P0 | Регистрация для начала игры (после появления: 1 — подсказка / 2 — начать / 3 — переброс; переброс только один раз) |
+| `/nw注册 <имя> [пароль для веба]` | P0 | Регистрация. Пароль используется для входа в **веб-версию** (затем: 1 — подсказка / 2 — начать / 3 — переброс; переброс только один раз) |
 | `/nw我` `/nw资源` `/nw岛` | P0 | Карточка фракции, запасы ресурсов, подробности об острове |
 | `/nw建造 <название постройки>` | P0 | Смета на постройку / улучшение (проверяются ресурсы, слоты, залежь, уровень острова, предварительные условия) |
 | `/nw队列` | P0 | Очереди постройки / исследований / дока и оставшееся время |
@@ -259,6 +363,30 @@ Plugin naval_warfare (0.1.0) ...
 | `/nw驻防` `/nw护航` `/nw封锁` `/nw登陆` `/nw空袭` и др. | P2b+ | Команды зарегистрированы; сейчас возвращают уведомление «ещё не открыто» |
 
 Сообщения, не являющиеся командами, никогда не перехватываются — они уходят в обычный чат с ИИ. Голый префикс распознаётся только тогда, когда за ним следует известная команда.
+
+## Веб-версия
+
+Тот же движок и та же база данных, но вход через браузер. **Игровая логика не менялась** — веб-слой лишь заменяет транспорт с сообщений QQ на HTTP.
+
+- Вход по **номеру QQ + веб-паролю** (задаётся при регистрации: `/nw注册 <имя> <пароль>`)
+- Правила пароля: не менее 4 символов, не только цифры
+- **Старые аккаунты** (зарегистрированные без пароля) могут войти по одному номеру QQ, но **обязаны задать пароль** до начала игры
+- Аккаунт должен быть заранее зарегистрирован на стороне QQ
+
+Развёртывание: пробросьте порт `8090` в `docker-compose.yml` (настройки `web_enable` / `web_port` / `web_host` — в `_conf_schema.json`). HTTP-сервис работает **внутри процесса плагина AstrBot**, поэтому использует то же соединение SQLite и те же сессии подтверждения и режима проектирования, что и сторона QQ — гонок между процессами нет.
+
+Для доступа извне без публичного IP подойдёт быстрый туннель cloudflared (без аккаунта):
+
+```powershell
+docker run -d --name naval-tunnel --restart unless-stopped `
+  cloudflare/cloudflared:latest tunnel --no-autoupdate `
+  --url http://host.docker.internal:8090
+```
+
+> ⚠️ Адрес быстрого туннеля меняется при каждом перезапуске. Для постоянного домена нужен именованный туннель Cloudflare (аккаунт + домен).
+> ⚠️ Перед публикацией убедитесь, что у аккаунта уже задан пароль.
+
+Разбор команд находится в `naval/router.py` и используется и `main.py` (QQ), и `naval/webapp.py` (веб), поэтому поведение двух сторон не может разойтись.
 
 ## Установка
 

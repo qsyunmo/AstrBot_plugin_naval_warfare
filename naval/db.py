@@ -17,6 +17,14 @@ def connect() -> sqlite3.Connection:
 
 def _migrate(conn: sqlite3.Connection) -> None:
     """P0→P1：旧库 designs 表补列（CREATE TABLE IF NOT EXISTS 不会改已存在的表）。"""
+    # Web 版：players 补 Web 登录密码（pbkdf2 散列；NULL/空 = 尚未设置）
+    pcols = {r[1] for r in conn.execute("PRAGMA table_info(players)").fetchall()}
+    if pcols:
+        for name, decl in (("web_pass", "TEXT"),
+                           ("web_pass_at", "INTEGER")):
+            if name not in pcols:
+                conn.execute(f"ALTER TABLE players ADD COLUMN {name} {decl}")
+
     cols = {r[1] for r in conn.execute("PRAGMA table_info(designs)").fetchall()}
     if not cols:
         return

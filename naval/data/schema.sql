@@ -31,7 +31,9 @@ CREATE TABLE IF NOT EXISTS players (
   treaty_signed INTEGER DEFAULT 1,   -- 海军条约是否生效
   treaty_used   REAL DEFAULT 0,      -- 已占用条约吨位
   settings      TEXT DEFAULT '{}',   -- 推送等偏好
-  last_seen     INTEGER
+  last_seen     INTEGER,
+  web_pass      TEXT,                -- Web 登录口令（pbkdf2_sha256$...；NULL/空=未设置，登录后引导设置）
+  web_pass_at   INTEGER              -- 口令最后修改时间（epoch 秒）
 );
 
 -- 岛屿（稀疏：仅存被占领/特殊岛；key=x*1000+y，环面地图）
