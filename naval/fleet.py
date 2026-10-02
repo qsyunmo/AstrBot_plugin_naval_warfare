@@ -66,7 +66,13 @@ def in_battle(conn, fleet_id: int):
             "SELECT id,sides_json FROM battles WHERE status='active'").fetchall():
         sides = json.loads(r["sides_json"] or "{}")
         a, b = sides.get("A", {}), sides.get("B", {})
-        if a.get("fleet_id") == fleet_id or b.get("fleet_id") == fleet_id:
+        if b.get("fleet_id") == fleet_id:
+            return r["id"]
+        # §27 一方可有多支舰队参战（fleet_ids 含主队）
+        ids = [v for v in (a.get("fleet_ids") or [])]
+        if fleet_id in ids:
+            return r["id"]
+        if a.get("fleet_id") == fleet_id:
             return r["id"]
     return None
 
@@ -130,15 +136,43 @@ def move_quote(conn, cfg: dict, fleet_row) -> dict:
             "speed": spd, "minutes": ticks * cfg["tick"]["war_min"]}
 
 
+STATION_TYPES = ("patrol", "asw")   # 先驶向阵位中心、再驻留的任务（§4 巡逻/反潜）
+
+
 def war_tick_move(conn, cfg: dict):
-    """推进所有 move/attack 任务一格；到点清空 mission。返回抵达的舰队行列表。"""
+    """推进所有移动类任务一格。返回抵达事件列表 [(fleet_row, type, x, y)]。
+
+    - move/attack：驶向 (tx,ty)，到点清空 mission
+    - patrol/asw：驶向阵位中心 (cx,cy)，进入半径后转 on_station 驻留（不再移动）
+    驻防/伏击是原地姿态，不在这里处理。
+    """
     arrived = []
     cdiv = cfg["fleet"]["cells_per_speed"]
     for f in conn.execute("SELECT * FROM fleets").fetchall():
         if not f["mission"] or f["mission"] == "{}":
             continue
         m = json.loads(f["mission"] or "{}")
-        if m.get("type") not in ("move", "attack"):
+        mtype = m.get("type")
+
+        if mtype in STATION_TYPES:
+            cx, cy = m.get("cx"), m.get("cy")
+            if cx is None or cy is None:
+                continue
+            radius = int(m.get("radius", 3))
+            if max(abs(f["x"] - cx), abs(f["y"] - cy)) <= radius:
+                if m.get("phase") != "on_station":
+                    m["phase"] = "on_station"
+                    conn.execute("UPDATE fleets SET mission=? WHERE id=?",
+                                 (json.dumps(m, ensure_ascii=False), f["id"]))
+                    arrived.append((f, mtype, f["x"], f["y"]))
+                continue
+            step = max(1, round(fleet_speed(conn, f["id"]) / cdiv))
+            nx = f["x"] + max(-step, min(step, cx - f["x"]))
+            ny = f["y"] + max(-step, min(step, cy - f["y"]))
+            conn.execute("UPDATE fleets SET x=?,y=? WHERE id=?", (nx, ny, f["id"]))
+            continue
+
+        if mtype not in ("move", "attack"):
             continue
         tx, ty = m["tx"], m["ty"]
         step = max(1, round(fleet_speed(conn, f["id"]) / cdiv))
@@ -147,11 +181,35 @@ def war_tick_move(conn, cfg: dict):
         if (nx, ny) == (tx, ty):
             conn.execute("UPDATE fleets SET x=?,y=?,mission='{}' WHERE id=?",
                          (nx, ny, f["id"]))
-            arrived.append((f, m.get("type"), nx, ny))
+            arrived.append((f, mtype, nx, ny))
         else:
             conn.execute("UPDATE fleets SET x=?,y=? WHERE id=?", (nx, ny, f["id"]))
     conn.commit()
     return arrived
+
+
+def mission_of(fleet_row) -> dict:
+    """安全解析舰队任务 json。"""
+    try:
+        return json.loads(fleet_row["mission"] or "{}")
+    except Exception:
+        return {}
+
+
+def is_subs_only(conn, fleet_id: int) -> bool:
+    """舰队是否清一色潜艇（伏击阵位要求，§4「潜艇舰队」）。"""
+    rows = conn.execute("SELECT def_id FROM ships WHERE fleet_id=?", (fleet_id,)).fetchall()
+    if not rows:
+        return False
+    for r in rows:
+        cls = None
+        if str(r["def_id"]).isdigit():
+            d = conn.execute("SELECT ship_class FROM designs WHERE id=?",
+                             (int(r["def_id"]),)).fetchone()
+            cls = d["ship_class"] if d else None
+        if not str(cls or "").startswith("ss"):
+            return False
+    return True
 
 
 def latest_origin(conn, qq: str):

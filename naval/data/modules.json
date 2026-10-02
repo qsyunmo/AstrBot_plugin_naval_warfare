@@ -1,232 +1,1637 @@
 {
-  "_comment": "蓝图池数据（§19.17 抽卡制）。模块id规则：{舰种}_t{T}_{key}。同T模块为横向取舍，数值仅战斗推演前的预览值，改数不动代码。",
-  "research_cost": {
-    "1": { "science": 30,   "money": 100,  "rare_earth": 0,  "chips": 0, "sec": 300 },
-    "2": { "science": 80,   "money": 250,  "rare_earth": 0,  "chips": 0, "sec": 300 },
-    "3": { "science": 200,  "money": 600,  "rare_earth": 0,  "chips": 0, "sec": 300 },
-    "4": { "science": 450,  "money": 1200, "rare_earth": 10, "chips": 0, "sec": 300 },
-    "5": { "science": 1000, "money": 2500, "rare_earth": 30, "chips": 2, "sec": 300 }
+ "_comment": "蓝图池数据（§19.17 抽卡制）。模块id规则：{舰种}_t{T}_{key}。同T模块为横向取舍，数值仅战斗推演前的预览值，改数不动代码。",
+ "research_cost": {
+  "1": {
+   "science": 30,
+   "money": 100,
+   "rare_earth": 0,
+   "chips": 0,
+   "sec": 300
   },
-  "express_mult": 10,
-  "lab_slots": [1, 1, 2, 2, 3],
-  "time_discount_per_proving": 0.10,
-  "min_time_ratio": 0.7,
-  "pity": { "blue": 10, "purple": 50, "gold": 100 },
-  "reroll_dup_chance": 0.5,
-  "rarity": {
-    "white":  { "weight": 60, "frag": 5,   "exchange": 50,   "name": "白", "cost_mult": 1.0 },
-    "blue":   { "weight": 30, "frag": 20,  "exchange": 150,  "name": "蓝", "cost_mult": 1.6 },
-    "purple": { "weight": 9,  "frag": 60,  "exchange": 400,  "name": "紫", "cost_mult": 2.8 },
-    "gold":   { "weight": 1,  "frag": 200, "exchange": 1000, "name": "金", "cost_mult": 5.0 }
+  "2": {
+   "science": 80,
+   "money": 250,
+   "rare_earth": 0,
+   "chips": 0,
+   "sec": 300
   },
-  "tier_stat_mult": [1, 1.5, 2.3, 3.5, 5.2],
-  "tier_hp_mult": [1, 1.35, 1.8, 2.4, 3.2],
-  "tier_cost_mult": [1, 1.8, 3.2, 5.5, 9],
-  "work_divisor": 10,
-  "max_produce_qty": 10,
-  "slot_names": {
-    "hull": "船体", "engine": "动力", "gun": "主炮", "torpedo": "鱼雷",
-    "asw": "反潜", "aa": "防空", "electronic": "电子", "sonar": "声呐",
-    "stealth": "静音", "cargo": "货舱"
+  "3": {
+   "science": 200,
+   "money": 600,
+   "rare_earth": 0,
+   "chips": 0,
+   "sec": 300
   },
-  "classes": {
-    "frigate": {
-      "name": "护卫舰", "base_hp": 80,
-      "slots": ["hull", "engine", "gun", "asw", "aa", "electronic"],
-      "required": ["hull", "engine"],
-      "slot_cost": {
-        "hull":       { "steel": 30,  "money": 40,  "work": 6,  "manpower": 20 },
-        "engine":     { "steel": 15,  "money": 25,  "work": 3,  "oil": 10 },
-        "gun":        { "steel": 12,  "money": 20,  "work": 2 },
-        "asw":        { "steel": 8,   "money": 15,  "work": 2 },
-        "aa":         { "steel": 8,   "money": 15,  "work": 2 },
-        "electronic": { "steel": 5,   "money": 30,  "work": 2 }
-      }
-    },
-    "destroyer": {
-      "name": "驱逐舰", "base_hp": 120,
-      "slots": ["hull", "engine", "gun", "torpedo", "asw", "aa", "electronic"],
-      "required": ["hull", "engine"],
-      "slot_cost": {
-        "hull":       { "steel": 50,  "money": 60,  "work": 8,  "manpower": 30 },
-        "engine":     { "steel": 25,  "money": 40,  "work": 4,  "oil": 15 },
-        "gun":        { "steel": 20,  "money": 30,  "work": 3 },
-        "torpedo":    { "steel": 12,  "money": 20,  "work": 3 },
-        "asw":        { "steel": 10,  "money": 18,  "work": 2 },
-        "aa":         { "steel": 10,  "money": 18,  "work": 2 },
-        "electronic": { "steel": 8,   "money": 40,  "work": 2 }
-      }
-    },
-    "light_cruiser": {
-      "name": "轻巡洋舰", "base_hp": 260,
-      "slots": ["hull", "engine", "gun", "torpedo", "aa", "electronic"],
-      "required": ["hull", "engine"],
-      "slot_cost": {
-        "hull":       { "steel": 120, "money": 150, "work": 14, "manpower": 80 },
-        "engine":     { "steel": 60,  "money": 80,  "work": 8,  "oil": 30 },
-        "gun":        { "steel": 50,  "money": 70,  "work": 6 },
-        "torpedo":    { "steel": 20,  "money": 30,  "work": 3 },
-        "aa":         { "steel": 20,  "money": 30,  "work": 3 },
-        "electronic": { "steel": 15,  "money": 80,  "work": 4 }
-      }
-    },
-    "ss_attack": {
-      "name": "攻击潜艇", "base_hp": 100,
-      "slots": ["hull", "engine", "torpedo", "sonar", "stealth"],
-      "required": ["hull", "engine"],
-      "slot_cost": {
-        "hull":    { "steel": 50, "money": 60, "work": 8, "manpower": 30 },
-        "engine":  { "steel": 30, "money": 50, "work": 5, "oil": 12 },
-        "torpedo": { "steel": 25, "money": 40, "work": 4 },
-        "sonar":   { "steel": 10, "money": 40, "work": 3 },
-        "stealth": { "steel": 15, "money": 30, "work": 4 }
-      }
-    },
-    "ss_escort": {
-      "name": "护航潜艇", "base_hp": 90,
-      "slots": ["hull", "engine", "torpedo", "asw", "sonar", "stealth"],
-      "required": ["hull", "engine"],
-      "slot_cost": {
-        "hull":    { "steel": 45, "money": 55, "work": 8, "manpower": 28 },
-        "engine":  { "steel": 28, "money": 45, "work": 5, "oil": 12 },
-        "torpedo": { "steel": 15, "money": 25, "work": 3 },
-        "asw":     { "steel": 12, "money": 20, "work": 3 },
-        "sonar":   { "steel": 10, "money": 40, "work": 3 },
-        "stealth": { "steel": 15, "money": 30, "work": 4 }
-      }
-    },
-    "transport": {
-      "name": "运输船", "base_hp": 150,
-      "slots": ["hull", "engine", "cargo", "aa"],
-      "required": ["hull", "engine", "cargo"],
-      "slot_cost": {
-        "hull":   { "steel": 60, "money": 40, "work": 10, "manpower": 20 },
-        "engine": { "steel": 20, "money": 25, "work": 4, "oil": 10 },
-        "cargo":  { "steel": 25, "money": 20, "work": 4 },
-        "aa":     { "steel": 6,  "money": 12, "work": 2 }
-      }
-    }
+  "4": {
+   "science": 450,
+   "money": 1200,
+   "rare_earth": 10,
+   "chips": 0,
+   "sec": 300
   },
-  "archetypes": {
-    "frigate": [
-      { "key": "hull_std",    "slot": "hull",   "rarity": "white",  "name": "标准船体",   "stats": { "hp": 1.0,  "spd": 0 } },
-      { "key": "hull_ocean",  "slot": "hull",   "rarity": "blue",   "name": "远洋船体",   "stats": { "hp": 0.9,  "spd": 2, "range": 1 } },
-      { "key": "hull_heavy",  "slot": "hull",   "rarity": "blue",   "name": "重装船体",   "stats": { "hp": 1.25, "spd": -2 } },
-      { "key": "hull_recon",  "slot": "hull",   "rarity": "purple", "name": "侦察船体",   "stats": { "hp": 0.85, "spd": 1, "detect": 10 } },
-      { "key": "eng_std",     "slot": "engine", "rarity": "white",  "name": "标准柴油机", "stats": { "speed": 18 } },
-      { "key": "eng_econ",    "slot": "engine", "rarity": "blue",   "name": "省油轮机",   "stats": { "speed": 17, "fuel_save": 1 } },
-      { "key": "eng_over",    "slot": "engine", "rarity": "purple", "name": "超载轮机",   "stats": { "speed": 22 } },
-      { "key": "gun_76",      "slot": "gun",    "rarity": "white",  "name": "76mm舰炮",   "stats": { "fire": 8 } },
-      { "key": "gun_dp",      "slot": "gun",    "rarity": "blue",   "name": "高平两用炮", "stats": { "fire": 7, "aa": 6 } },
-      { "key": "gun_rapid",   "slot": "gun",    "rarity": "purple", "name": "全自动速射炮","stats": { "fire": 11, "aa": 4 } },
-      { "key": "asw_rail",    "slot": "asw",    "rarity": "white",  "name": "深弹滑轨",   "stats": { "asw": 8 } },
-      { "key": "asw_hedge",   "slot": "asw",    "rarity": "blue",   "name": "刺猬弹",     "stats": { "asw": 13 } },
-      { "key": "asw_torp",    "slot": "asw",    "rarity": "purple", "name": "反潜鱼雷",   "stats": { "asw": 18 } },
-      { "key": "aa_mg",       "slot": "aa",     "rarity": "white",  "name": "机炮群",     "stats": { "aa": 6 } },
-      { "key": "aa_bofors",   "slot": "aa",     "rarity": "blue",   "name": "博福斯炮群", "stats": { "aa": 11 } },
-      { "key": "aa_ciws",     "slot": "aa",     "rarity": "gold",   "name": "近防系统CIWS","stats": { "aa": 22 } },
-      { "key": "el_lookout",  "slot": "electronic", "rarity": "white",  "name": "瞭望哨",     "stats": { "detect": 8 } },
-      { "key": "el_radar",    "slot": "electronic", "rarity": "blue",   "name": "对海雷达",   "stats": { "detect": 14 } },
-      { "key": "el_fc",       "slot": "electronic", "rarity": "purple", "name": "火控雷达",   "stats": { "detect": 16, "hit": 8 } },
-      { "key": "el_link",     "slot": "electronic", "rarity": "gold",   "name": "数据链",     "stats": { "detect": 20, "hit": 15 } }
-    ],
-    "destroyer": [
-      { "key": "hull_std",    "slot": "hull",   "rarity": "white",  "name": "标准船体",   "stats": { "hp": 1.0,  "spd": 0 } },
-      { "key": "hull_ocean",  "slot": "hull",   "rarity": "blue",   "name": "远洋船体",   "stats": { "hp": 0.9,  "spd": 2, "range": 1 } },
-      { "key": "hull_heavy",  "slot": "hull",   "rarity": "blue",   "name": "重装船体",   "stats": { "hp": 1.25, "spd": -2 } },
-      { "key": "hull_recon",  "slot": "hull",   "rarity": "purple", "name": "侦察船体",   "stats": { "hp": 0.85, "spd": 1, "detect": 10 } },
-      { "key": "eng_std",     "slot": "engine", "rarity": "white",  "name": "蒸汽轮机",   "stats": { "speed": 20 } },
-      { "key": "eng_econ",    "slot": "engine", "rarity": "blue",   "name": "巡航省油轮机","stats": { "speed": 19, "fuel_save": 1 } },
-      { "key": "eng_over",    "slot": "engine", "rarity": "purple", "name": "超载燃气轮机","stats": { "speed": 25 } },
-      { "key": "gun_127",     "slot": "gun",    "rarity": "white",  "name": "单装127mm炮", "stats": { "fire": 12 } },
-      { "key": "gun_dp127",   "slot": "gun",    "rarity": "blue",   "name": "双联高平127","stats": { "fire": 11, "aa": 8 } },
-      { "key": "gun_auto127", "slot": "gun",    "rarity": "purple", "name": "自动127mm炮", "stats": { "fire": 16, "aa": 6 } },
-      { "key": "torp_3x533",  "slot": "torpedo","rarity": "white",  "name": "三联533鱼雷", "stats": { "torpedo": 14 } },
-      { "key": "torp_4x533",  "slot": "torpedo","rarity": "blue",   "name": "四联533鱼雷", "stats": { "torpedo": 20 } },
-      { "key": "torp_oxygen", "slot": "torpedo","rarity": "purple", "name": "610氧气鱼雷", "stats": { "torpedo": 30 } },
-      { "key": "asw_rail",    "slot": "asw",    "rarity": "white",  "name": "深弹滑轨",   "stats": { "asw": 8 } },
-      { "key": "asw_hedge",   "slot": "asw",    "rarity": "blue",   "name": "刺猬弹",     "stats": { "asw": 13 } },
-      { "key": "asw_torp",    "slot": "asw",    "rarity": "purple", "name": "反潜鱼雷",   "stats": { "asw": 18 } },
-      { "key": "aa_mg",       "slot": "aa",     "rarity": "white",  "name": "机炮群",     "stats": { "aa": 5 } },
-      { "key": "aa_bofors",   "slot": "aa",     "rarity": "blue",   "name": "博福斯炮群", "stats": { "aa": 10 } },
-      { "key": "el_lookout",  "slot": "electronic", "rarity": "white",  "name": "瞭望哨",     "stats": { "detect": 8 } },
-      { "key": "el_radar",    "slot": "electronic", "rarity": "blue",   "name": "对海雷达",   "stats": { "detect": 14 } },
-      { "key": "el_fc",       "slot": "electronic", "rarity": "purple", "name": "火控雷达",   "stats": { "detect": 16, "hit": 8 } },
-      { "key": "el_link",     "slot": "electronic", "rarity": "gold",   "name": "数据链",     "stats": { "detect": 20, "hit": 15 } }
-    ],
-    "light_cruiser": [
-      { "key": "hull_std",    "slot": "hull",   "rarity": "white",  "name": "标准船体",   "stats": { "hp": 1.0,  "spd": 0 } },
-      { "key": "hull_ocean",  "slot": "hull",   "rarity": "blue",   "name": "远洋船体",   "stats": { "hp": 0.92, "spd": 1, "range": 1 } },
-      { "key": "hull_heavy",  "slot": "hull",   "rarity": "blue",   "name": "重装船体",   "stats": { "hp": 1.22, "spd": -2 } },
-      { "key": "hull_recon",  "slot": "hull",   "rarity": "purple", "name": "侦察船体",   "stats": { "hp": 0.88, "spd": 1, "detect": 10 } },
-      { "key": "eng_std",     "slot": "engine", "rarity": "white",  "name": "蒸汽轮机",   "stats": { "speed": 16 } },
-      { "key": "eng_diesel",  "slot": "engine", "rarity": "blue",   "name": "巡航柴油机", "stats": { "speed": 15, "fuel_save": 1 } },
-      { "key": "eng_over",    "slot": "engine", "rarity": "purple", "name": "超载轮机",   "stats": { "speed": 20 } },
-      { "key": "gun_152",     "slot": "gun",    "rarity": "white",  "name": "单装152mm炮", "stats": { "fire": 22 } },
-      { "key": "gun_2x152",   "slot": "gun",    "rarity": "blue",   "name": "双联152mm炮", "stats": { "fire": 32 } },
-      { "key": "gun_3x152",   "slot": "gun",    "rarity": "purple", "name": "三联速射152","stats": { "fire": 44 } },
-      { "key": "gun_legend",  "slot": "gun",    "rarity": "gold",   "name": "传奇主炮",   "stats": { "fire": 60, "hit": 5 } },
-      { "key": "torp_side",   "slot": "torpedo","rarity": "white",  "name": "舷侧533鱼雷", "stats": { "torpedo": 12 } },
-      { "key": "torp_cl4",    "slot": "torpedo","rarity": "blue",   "name": "中线四联鱼雷", "stats": { "torpedo": 20 } },
-      { "key": "aa_mg",       "slot": "aa",     "rarity": "white",  "name": "机炮群",     "stats": { "aa": 5 } },
-      { "key": "aa_dpnet",    "slot": "aa",     "rarity": "blue",   "name": "高平炮网",   "stats": { "aa": 12 } },
-      { "key": "aa_vt",       "slot": "aa",     "rarity": "purple", "name": "VT引信高炮", "stats": { "aa": 20 } },
-      { "key": "el_lookout",  "slot": "electronic", "rarity": "white",  "name": "瞭望哨",     "stats": { "detect": 8 } },
-      { "key": "el_radar",    "slot": "electronic", "rarity": "blue",   "name": "对海雷达",   "stats": { "detect": 14 } },
-      { "key": "el_fc",       "slot": "electronic", "rarity": "purple", "name": "火控雷达",   "stats": { "detect": 16, "hit": 8 } }
-    ],
-    "ss_attack": [
-      { "key": "hull_std",    "slot": "hull",   "rarity": "white",  "name": "标准艇体",   "stats": { "hp": 1.0,  "spd": 0 } },
-      { "key": "hull_ocean",  "slot": "hull",   "rarity": "blue",   "name": "远洋续航艇体","stats": { "hp": 0.9,  "spd": 1, "range": 1 } },
-      { "key": "hull_double", "slot": "hull",   "rarity": "blue",   "name": "双壳重装艇体","stats": { "hp": 1.3,  "spd": -2 } },
-      { "key": "hull_tear",   "slot": "hull",   "rarity": "purple", "name": "水滴线型艇体","stats": { "hp": 0.92, "spd": 3, "stealth": 6 } },
-      { "key": "eng_dede",    "slot": "engine", "rarity": "white",  "name": "柴电推进",   "stats": { "speed": 12 } },
-      { "key": "eng_snorkel", "slot": "engine", "rarity": "blue",   "name": "通气管柴油机","stats": { "speed": 13 } },
-      { "key": "eng_aip",     "slot": "engine", "rarity": "purple", "name": "AIP动力",    "stats": { "speed": 15, "stealth": 8 } },
-      { "key": "torp_533",    "slot": "torpedo","rarity": "white",  "name": "533mm鱼雷",  "stats": { "torpedo": 18 } },
-      { "key": "torp_610",    "slot": "torpedo","rarity": "blue",   "name": "610mm鱼雷",  "stats": { "torpedo": 26 } },
-      { "key": "torp_oxygen", "slot": "torpedo","rarity": "purple", "name": "氧气鱼雷",   "stats": { "torpedo": 38 } },
-      { "key": "son_listen",  "slot": "sonar",  "rarity": "white",  "name": "听音器",     "stats": { "detect": 6 } },
-      { "key": "son_active",  "slot": "sonar",  "rarity": "blue",   "name": "主动声呐",   "stats": { "detect": 11 } },
-      { "key": "son_towed",   "slot": "sonar",  "rarity": "purple", "name": "拖曳阵列",   "stats": { "detect": 16 } },
-      { "key": "son_conform", "slot": "sonar",  "rarity": "gold",   "name": "舷侧共形阵", "stats": { "detect": 22, "stealth": 5 } },
-      { "key": "stl_std",     "slot": "stealth","rarity": "white",  "name": "标准消声敷设","stats": { "stealth": 10 } },
-      { "key": "stl_tiles",   "slot": "stealth","rarity": "blue",   "name": "消声瓦",     "stats": { "stealth": 16 } },
-      { "key": "stl_pump",    "slot": "stealth","rarity": "purple", "name": "泵喷推进",   "stats": { "stealth": 24 } }
-    ],
-    "ss_escort": [
-      { "key": "hull_std",    "slot": "hull",   "rarity": "white",  "name": "标准艇体",   "stats": { "hp": 1.0,  "spd": 0 } },
-      { "key": "hull_ocean",  "slot": "hull",   "rarity": "blue",   "name": "远洋续航艇体","stats": { "hp": 0.9,  "spd": 1, "range": 1 } },
-      { "key": "hull_double", "slot": "hull",   "rarity": "blue",   "name": "双壳重装艇体","stats": { "hp": 1.3,  "spd": -2 } },
-      { "key": "hull_tear",   "slot": "hull",   "rarity": "purple", "name": "水滴线型艇体","stats": { "hp": 0.92, "spd": 3, "stealth": 6 } },
-      { "key": "eng_dede",    "slot": "engine", "rarity": "white",  "name": "柴电推进",   "stats": { "speed": 11 } },
-      { "key": "eng_snorkel", "slot": "engine", "rarity": "blue",   "name": "通气管柴油机","stats": { "speed": 12 } },
-      { "key": "eng_aip",     "slot": "engine", "rarity": "purple", "name": "AIP动力",    "stats": { "speed": 14, "stealth": 8 } },
-      { "key": "torp_short",  "slot": "torpedo","rarity": "white",  "name": "短管533鱼雷","stats": { "torpedo": 10 } },
-      { "key": "torp_533",    "slot": "torpedo","rarity": "blue",   "name": "533mm鱼雷",  "stats": { "torpedo": 16 } },
-      { "key": "asw_rail",    "slot": "asw",    "rarity": "white",  "name": "深弹滑轨",   "stats": { "asw": 10 } },
-      { "key": "asw_hedge",   "slot": "asw",    "rarity": "blue",   "name": "刺猬弹",     "stats": { "asw": 16 } },
-      { "key": "asw_torp",    "slot": "asw",    "rarity": "purple", "name": "反潜鱼雷",   "stats": { "asw": 24 } },
-      { "key": "son_listen",  "slot": "sonar",  "rarity": "white",  "name": "听音器",     "stats": { "detect": 6 } },
-      { "key": "son_active",  "slot": "sonar",  "rarity": "blue",   "name": "主动声呐",   "stats": { "detect": 11 } },
-      { "key": "son_towed",   "slot": "sonar",  "rarity": "purple", "name": "拖曳阵列",   "stats": { "detect": 16 } },
-      { "key": "son_conform", "slot": "sonar",  "rarity": "gold",   "name": "舷侧共形阵", "stats": { "detect": 22, "stealth": 5 } },
-      { "key": "stl_std",     "slot": "stealth","rarity": "white",  "name": "标准消声敷设","stats": { "stealth": 10 } },
-      { "key": "stl_tiles",   "slot": "stealth","rarity": "blue",   "name": "消声瓦",     "stats": { "stealth": 16 } },
-      { "key": "stl_pump",    "slot": "stealth","rarity": "purple", "name": "泵喷推进",   "stats": { "stealth": 24 } }
-    ],
-    "transport": [
-      { "key": "hull_std",    "slot": "hull",   "rarity": "white",  "name": "标准货轮船体","stats": { "hp": 1.0, "spd": 0 } },
-      { "key": "hull_ocean",  "slot": "hull",   "rarity": "blue",   "name": "远洋货轮船体","stats": { "hp": 0.95, "spd": 1, "range": 1 } },
-      { "key": "hull_ro-ro",  "slot": "hull",   "rarity": "purple", "name": "加固滚装船体","stats": { "hp": 1.15, "spd": 0 } },
-      { "key": "eng_std",     "slot": "engine", "rarity": "white",  "name": "商船柴油机", "stats": { "speed": 10 } },
-      { "key": "eng_econ",    "slot": "engine", "rarity": "blue",   "name": "省油主机",   "stats": { "speed": 9, "fuel_save": 1 } },
-      { "key": "cargo_bulk",  "slot": "cargo",  "rarity": "white",  "name": "标准散货舱", "stats": { "cargo": 100 } },
-      { "key": "cargo_ref",   "slot": "cargo",  "rarity": "blue",   "name": "冷藏液货舱", "stats": { "cargo": 140 } },
-      { "key": "cargo_troop", "slot": "cargo",  "rarity": "purple", "name": "滚装运兵舱", "stats": { "cargo": 80, "troop": 1 } },
-      { "key": "cargo_auto",  "slot": "cargo",  "rarity": "gold",   "name": "自动化转运码头","stats": { "cargo": 200 } },
-      { "key": "aa_mg",       "slot": "aa",     "rarity": "white",  "name": "轻机炮",     "stats": { "aa": 3 } },
-      { "key": "aa_gun",      "slot": "aa",     "rarity": "blue",   "name": "加装高炮",   "stats": { "aa": 7 } }
-    ]
+  "5": {
+   "science": 1000,
+   "money": 2500,
+   "rare_earth": 30,
+   "chips": 2,
+   "sec": 300
   }
+ },
+ "express_mult": 10,
+ "lab_slots": [
+  1,
+  1,
+  2,
+  2,
+  3
+ ],
+ "time_discount_per_proving": 0.1,
+ "min_time_ratio": 0.7,
+ "pity": {
+  "blue": 10,
+  "purple": 50,
+  "gold": 100
+ },
+ "reroll_dup_chance": 0.5,
+ "rarity": {
+  "white": {
+   "weight": 60,
+   "frag": 5,
+   "exchange": 50,
+   "name": "白",
+   "cost_mult": 1.0
+  },
+  "blue": {
+   "weight": 30,
+   "frag": 20,
+   "exchange": 150,
+   "name": "蓝",
+   "cost_mult": 1.6
+  },
+  "purple": {
+   "weight": 9,
+   "frag": 60,
+   "exchange": 400,
+   "name": "紫",
+   "cost_mult": 2.8
+  },
+  "gold": {
+   "weight": 1,
+   "frag": 200,
+   "exchange": 1000,
+   "name": "金",
+   "cost_mult": 5.0
+  }
+ },
+ "tier_stat_mult": [
+  1,
+  1.5,
+  2.3,
+  3.5,
+  5.2
+ ],
+ "tier_hp_mult": [
+  1,
+  1.35,
+  1.8,
+  2.4,
+  3.2
+ ],
+ "tier_cost_mult": [
+  1,
+  1.8,
+  3.2,
+  5.5,
+  9
+ ],
+ "work_divisor": 10,
+ "max_produce_qty": 10,
+ "slot_names": {
+  "hull": "船体",
+  "engine": "动力",
+  "gun": "主炮",
+  "torpedo": "鱼雷",
+  "asw": "反潜",
+  "aa": "防空",
+  "electronic": "电子",
+  "sonar": "声呐",
+  "stealth": "静音",
+  "cargo": "货舱",
+  "deck": "飞行甲板",
+  "hangar": "机库"
+ },
+ "classes": {
+  "frigate": {
+   "name": "护卫舰",
+   "base_hp": 80,
+   "slots": [
+    "hull",
+    "engine",
+    "gun",
+    "asw",
+    "aa",
+    "electronic"
+   ],
+   "required": [
+    "hull",
+    "engine"
+   ],
+   "slot_cost": {
+    "hull": {
+     "steel": 30,
+     "money": 40,
+     "work": 6,
+     "manpower": 20
+    },
+    "engine": {
+     "steel": 15,
+     "money": 25,
+     "work": 3,
+     "oil": 10
+    },
+    "gun": {
+     "steel": 12,
+     "money": 20,
+     "work": 2
+    },
+    "asw": {
+     "steel": 8,
+     "money": 15,
+     "work": 2
+    },
+    "aa": {
+     "steel": 8,
+     "money": 15,
+     "work": 2
+    },
+    "electronic": {
+     "steel": 5,
+     "money": 30,
+     "work": 2
+    }
+   }
+  },
+  "destroyer": {
+   "name": "驱逐舰",
+   "base_hp": 120,
+   "slots": [
+    "hull",
+    "engine",
+    "gun",
+    "torpedo",
+    "asw",
+    "aa",
+    "electronic"
+   ],
+   "required": [
+    "hull",
+    "engine"
+   ],
+   "slot_cost": {
+    "hull": {
+     "steel": 50,
+     "money": 60,
+     "work": 8,
+     "manpower": 30
+    },
+    "engine": {
+     "steel": 25,
+     "money": 40,
+     "work": 4,
+     "oil": 15
+    },
+    "gun": {
+     "steel": 20,
+     "money": 30,
+     "work": 3
+    },
+    "torpedo": {
+     "steel": 12,
+     "money": 20,
+     "work": 3
+    },
+    "asw": {
+     "steel": 10,
+     "money": 18,
+     "work": 2
+    },
+    "aa": {
+     "steel": 10,
+     "money": 18,
+     "work": 2
+    },
+    "electronic": {
+     "steel": 8,
+     "money": 40,
+     "work": 2
+    }
+   }
+  },
+  "light_cruiser": {
+   "name": "轻巡洋舰",
+   "base_hp": 260,
+   "slots": [
+    "hull",
+    "engine",
+    "gun",
+    "torpedo",
+    "aa",
+    "electronic"
+   ],
+   "required": [
+    "hull",
+    "engine"
+   ],
+   "slot_cost": {
+    "hull": {
+     "steel": 120,
+     "money": 150,
+     "work": 14,
+     "manpower": 80
+    },
+    "engine": {
+     "steel": 60,
+     "money": 80,
+     "work": 8,
+     "oil": 30
+    },
+    "gun": {
+     "steel": 50,
+     "money": 70,
+     "work": 6
+    },
+    "torpedo": {
+     "steel": 20,
+     "money": 30,
+     "work": 3
+    },
+    "aa": {
+     "steel": 20,
+     "money": 30,
+     "work": 3
+    },
+    "electronic": {
+     "steel": 15,
+     "money": 80,
+     "work": 4
+    }
+   }
+  },
+  "ss_attack": {
+   "name": "攻击潜艇",
+   "base_hp": 100,
+   "slots": [
+    "hull",
+    "engine",
+    "torpedo",
+    "sonar",
+    "stealth"
+   ],
+   "required": [
+    "hull",
+    "engine"
+   ],
+   "slot_cost": {
+    "hull": {
+     "steel": 50,
+     "money": 60,
+     "work": 8,
+     "manpower": 30
+    },
+    "engine": {
+     "steel": 30,
+     "money": 50,
+     "work": 5,
+     "oil": 12
+    },
+    "torpedo": {
+     "steel": 25,
+     "money": 40,
+     "work": 4
+    },
+    "sonar": {
+     "steel": 10,
+     "money": 40,
+     "work": 3
+    },
+    "stealth": {
+     "steel": 15,
+     "money": 30,
+     "work": 4
+    }
+   }
+  },
+  "ss_escort": {
+   "name": "护航潜艇",
+   "base_hp": 90,
+   "slots": [
+    "hull",
+    "engine",
+    "torpedo",
+    "asw",
+    "sonar",
+    "stealth"
+   ],
+   "required": [
+    "hull",
+    "engine"
+   ],
+   "slot_cost": {
+    "hull": {
+     "steel": 45,
+     "money": 55,
+     "work": 8,
+     "manpower": 28
+    },
+    "engine": {
+     "steel": 28,
+     "money": 45,
+     "work": 5,
+     "oil": 12
+    },
+    "torpedo": {
+     "steel": 15,
+     "money": 25,
+     "work": 3
+    },
+    "asw": {
+     "steel": 12,
+     "money": 20,
+     "work": 3
+    },
+    "sonar": {
+     "steel": 10,
+     "money": 40,
+     "work": 3
+    },
+    "stealth": {
+     "steel": 15,
+     "money": 30,
+     "work": 4
+    }
+   }
+  },
+  "transport": {
+   "name": "运输船",
+   "base_hp": 150,
+   "slots": [
+    "hull",
+    "engine",
+    "cargo",
+    "aa"
+   ],
+   "required": [
+    "hull",
+    "engine",
+    "cargo"
+   ],
+   "slot_cost": {
+    "hull": {
+     "steel": 60,
+     "money": 40,
+     "work": 10,
+     "manpower": 20
+    },
+    "engine": {
+     "steel": 20,
+     "money": 25,
+     "work": 4,
+     "oil": 10
+    },
+    "cargo": {
+     "steel": 25,
+     "money": 20,
+     "work": 4
+    },
+    "aa": {
+     "steel": 6,
+     "money": 12,
+     "work": 2
+    }
+   }
+  },
+  "cv": {
+   "name": "航空母舰",
+   "base_hp": 900,
+   "slots": [
+    "hull",
+    "engine",
+    "deck",
+    "hangar",
+    "aa",
+    "electronic"
+   ],
+   "required": [
+    "hull",
+    "engine",
+    "deck",
+    "hangar"
+   ],
+   "slot_cost": {
+    "hull": {
+     "steel": 400,
+     "money": 500,
+     "work": 40,
+     "manpower": 200
+    },
+    "engine": {
+     "steel": 180,
+     "money": 240,
+     "work": 20,
+     "oil": 80
+    },
+    "deck": {
+     "steel": 160,
+     "money": 200,
+     "work": 18
+    },
+    "hangar": {
+     "steel": 120,
+     "money": 180,
+     "work": 14
+    },
+    "aa": {
+     "steel": 40,
+     "money": 60,
+     "work": 5
+    },
+    "electronic": {
+     "steel": 30,
+     "money": 160,
+     "work": 6
+    }
+   }
+  }
+ },
+ "archetypes": {
+  "frigate": [
+   {
+    "key": "hull_std",
+    "slot": "hull",
+    "rarity": "white",
+    "name": "标准船体",
+    "stats": {
+     "hp": 1.0,
+     "spd": 0
+    }
+   },
+   {
+    "key": "hull_ocean",
+    "slot": "hull",
+    "rarity": "blue",
+    "name": "远洋船体",
+    "stats": {
+     "hp": 0.9,
+     "spd": 2,
+     "range": 1
+    }
+   },
+   {
+    "key": "hull_heavy",
+    "slot": "hull",
+    "rarity": "blue",
+    "name": "重装船体",
+    "stats": {
+     "hp": 1.25,
+     "spd": -2
+    }
+   },
+   {
+    "key": "hull_recon",
+    "slot": "hull",
+    "rarity": "purple",
+    "name": "侦察船体",
+    "stats": {
+     "hp": 0.85,
+     "spd": 1,
+     "detect": 10
+    }
+   },
+   {
+    "key": "eng_std",
+    "slot": "engine",
+    "rarity": "white",
+    "name": "标准柴油机",
+    "stats": {
+     "speed": 18
+    }
+   },
+   {
+    "key": "eng_econ",
+    "slot": "engine",
+    "rarity": "blue",
+    "name": "省油轮机",
+    "stats": {
+     "speed": 17,
+     "fuel_save": 1
+    }
+   },
+   {
+    "key": "eng_over",
+    "slot": "engine",
+    "rarity": "purple",
+    "name": "超载轮机",
+    "stats": {
+     "speed": 22
+    }
+   },
+   {
+    "key": "gun_76",
+    "slot": "gun",
+    "rarity": "white",
+    "name": "76mm舰炮",
+    "stats": {
+     "fire": 8
+    }
+   },
+   {
+    "key": "gun_dp",
+    "slot": "gun",
+    "rarity": "blue",
+    "name": "高平两用炮",
+    "stats": {
+     "fire": 7,
+     "aa": 6
+    }
+   },
+   {
+    "key": "gun_rapid",
+    "slot": "gun",
+    "rarity": "purple",
+    "name": "全自动速射炮",
+    "stats": {
+     "fire": 11,
+     "aa": 4
+    }
+   },
+   {
+    "key": "asw_rail",
+    "slot": "asw",
+    "rarity": "white",
+    "name": "深弹滑轨",
+    "stats": {
+     "asw": 8
+    }
+   },
+   {
+    "key": "asw_hedge",
+    "slot": "asw",
+    "rarity": "blue",
+    "name": "刺猬弹",
+    "stats": {
+     "asw": 13
+    }
+   },
+   {
+    "key": "asw_torp",
+    "slot": "asw",
+    "rarity": "purple",
+    "name": "反潜鱼雷",
+    "stats": {
+     "asw": 18
+    }
+   },
+   {
+    "key": "aa_mg",
+    "slot": "aa",
+    "rarity": "white",
+    "name": "机炮群",
+    "stats": {
+     "aa": 6
+    }
+   },
+   {
+    "key": "aa_bofors",
+    "slot": "aa",
+    "rarity": "blue",
+    "name": "博福斯炮群",
+    "stats": {
+     "aa": 11
+    }
+   },
+   {
+    "key": "aa_ciws",
+    "slot": "aa",
+    "rarity": "gold",
+    "name": "近防系统CIWS",
+    "stats": {
+     "aa": 22
+    }
+   },
+   {
+    "key": "el_lookout",
+    "slot": "electronic",
+    "rarity": "white",
+    "name": "瞭望哨",
+    "stats": {
+     "detect": 8
+    }
+   },
+   {
+    "key": "el_radar",
+    "slot": "electronic",
+    "rarity": "blue",
+    "name": "对海雷达",
+    "stats": {
+     "detect": 14
+    }
+   },
+   {
+    "key": "el_fc",
+    "slot": "electronic",
+    "rarity": "purple",
+    "name": "火控雷达",
+    "stats": {
+     "detect": 16,
+     "hit": 8
+    }
+   },
+   {
+    "key": "el_link",
+    "slot": "electronic",
+    "rarity": "gold",
+    "name": "数据链",
+    "stats": {
+     "detect": 20,
+     "hit": 15
+    }
+   }
+  ],
+  "destroyer": [
+   {
+    "key": "hull_std",
+    "slot": "hull",
+    "rarity": "white",
+    "name": "标准船体",
+    "stats": {
+     "hp": 1.0,
+     "spd": 0
+    }
+   },
+   {
+    "key": "hull_ocean",
+    "slot": "hull",
+    "rarity": "blue",
+    "name": "远洋船体",
+    "stats": {
+     "hp": 0.9,
+     "spd": 2,
+     "range": 1
+    }
+   },
+   {
+    "key": "hull_heavy",
+    "slot": "hull",
+    "rarity": "blue",
+    "name": "重装船体",
+    "stats": {
+     "hp": 1.25,
+     "spd": -2
+    }
+   },
+   {
+    "key": "hull_recon",
+    "slot": "hull",
+    "rarity": "purple",
+    "name": "侦察船体",
+    "stats": {
+     "hp": 0.85,
+     "spd": 1,
+     "detect": 10
+    }
+   },
+   {
+    "key": "eng_std",
+    "slot": "engine",
+    "rarity": "white",
+    "name": "蒸汽轮机",
+    "stats": {
+     "speed": 20
+    }
+   },
+   {
+    "key": "eng_econ",
+    "slot": "engine",
+    "rarity": "blue",
+    "name": "巡航省油轮机",
+    "stats": {
+     "speed": 19,
+     "fuel_save": 1
+    }
+   },
+   {
+    "key": "eng_over",
+    "slot": "engine",
+    "rarity": "purple",
+    "name": "超载燃气轮机",
+    "stats": {
+     "speed": 25
+    }
+   },
+   {
+    "key": "gun_127",
+    "slot": "gun",
+    "rarity": "white",
+    "name": "单装127mm炮",
+    "stats": {
+     "fire": 12
+    }
+   },
+   {
+    "key": "gun_dp127",
+    "slot": "gun",
+    "rarity": "blue",
+    "name": "双联高平127",
+    "stats": {
+     "fire": 11,
+     "aa": 8
+    }
+   },
+   {
+    "key": "gun_auto127",
+    "slot": "gun",
+    "rarity": "purple",
+    "name": "自动127mm炮",
+    "stats": {
+     "fire": 16,
+     "aa": 6
+    }
+   },
+   {
+    "key": "torp_3x533",
+    "slot": "torpedo",
+    "rarity": "white",
+    "name": "三联533鱼雷",
+    "stats": {
+     "torpedo": 14
+    }
+   },
+   {
+    "key": "torp_4x533",
+    "slot": "torpedo",
+    "rarity": "blue",
+    "name": "四联533鱼雷",
+    "stats": {
+     "torpedo": 20
+    }
+   },
+   {
+    "key": "torp_oxygen",
+    "slot": "torpedo",
+    "rarity": "purple",
+    "name": "610氧气鱼雷",
+    "stats": {
+     "torpedo": 30
+    }
+   },
+   {
+    "key": "asw_rail",
+    "slot": "asw",
+    "rarity": "white",
+    "name": "深弹滑轨",
+    "stats": {
+     "asw": 8
+    }
+   },
+   {
+    "key": "asw_hedge",
+    "slot": "asw",
+    "rarity": "blue",
+    "name": "刺猬弹",
+    "stats": {
+     "asw": 13
+    }
+   },
+   {
+    "key": "asw_torp",
+    "slot": "asw",
+    "rarity": "purple",
+    "name": "反潜鱼雷",
+    "stats": {
+     "asw": 18
+    }
+   },
+   {
+    "key": "aa_mg",
+    "slot": "aa",
+    "rarity": "white",
+    "name": "机炮群",
+    "stats": {
+     "aa": 5
+    }
+   },
+   {
+    "key": "aa_bofors",
+    "slot": "aa",
+    "rarity": "blue",
+    "name": "博福斯炮群",
+    "stats": {
+     "aa": 10
+    }
+   },
+   {
+    "key": "el_lookout",
+    "slot": "electronic",
+    "rarity": "white",
+    "name": "瞭望哨",
+    "stats": {
+     "detect": 8
+    }
+   },
+   {
+    "key": "el_radar",
+    "slot": "electronic",
+    "rarity": "blue",
+    "name": "对海雷达",
+    "stats": {
+     "detect": 14
+    }
+   },
+   {
+    "key": "el_fc",
+    "slot": "electronic",
+    "rarity": "purple",
+    "name": "火控雷达",
+    "stats": {
+     "detect": 16,
+     "hit": 8
+    }
+   },
+   {
+    "key": "el_link",
+    "slot": "electronic",
+    "rarity": "gold",
+    "name": "数据链",
+    "stats": {
+     "detect": 20,
+     "hit": 15
+    }
+   }
+  ],
+  "light_cruiser": [
+   {
+    "key": "hull_std",
+    "slot": "hull",
+    "rarity": "white",
+    "name": "标准船体",
+    "stats": {
+     "hp": 1.0,
+     "spd": 0
+    }
+   },
+   {
+    "key": "hull_ocean",
+    "slot": "hull",
+    "rarity": "blue",
+    "name": "远洋船体",
+    "stats": {
+     "hp": 0.92,
+     "spd": 1,
+     "range": 1
+    }
+   },
+   {
+    "key": "hull_heavy",
+    "slot": "hull",
+    "rarity": "blue",
+    "name": "重装船体",
+    "stats": {
+     "hp": 1.22,
+     "spd": -2
+    }
+   },
+   {
+    "key": "hull_recon",
+    "slot": "hull",
+    "rarity": "purple",
+    "name": "侦察船体",
+    "stats": {
+     "hp": 0.88,
+     "spd": 1,
+     "detect": 10
+    }
+   },
+   {
+    "key": "eng_std",
+    "slot": "engine",
+    "rarity": "white",
+    "name": "蒸汽轮机",
+    "stats": {
+     "speed": 16
+    }
+   },
+   {
+    "key": "eng_diesel",
+    "slot": "engine",
+    "rarity": "blue",
+    "name": "巡航柴油机",
+    "stats": {
+     "speed": 15,
+     "fuel_save": 1
+    }
+   },
+   {
+    "key": "eng_over",
+    "slot": "engine",
+    "rarity": "purple",
+    "name": "超载轮机",
+    "stats": {
+     "speed": 20
+    }
+   },
+   {
+    "key": "gun_152",
+    "slot": "gun",
+    "rarity": "white",
+    "name": "单装152mm炮",
+    "stats": {
+     "fire": 22
+    }
+   },
+   {
+    "key": "gun_2x152",
+    "slot": "gun",
+    "rarity": "blue",
+    "name": "双联152mm炮",
+    "stats": {
+     "fire": 32
+    }
+   },
+   {
+    "key": "gun_3x152",
+    "slot": "gun",
+    "rarity": "purple",
+    "name": "三联速射152",
+    "stats": {
+     "fire": 44
+    }
+   },
+   {
+    "key": "gun_legend",
+    "slot": "gun",
+    "rarity": "gold",
+    "name": "传奇主炮",
+    "stats": {
+     "fire": 60,
+     "hit": 5
+    }
+   },
+   {
+    "key": "torp_side",
+    "slot": "torpedo",
+    "rarity": "white",
+    "name": "舷侧533鱼雷",
+    "stats": {
+     "torpedo": 12
+    }
+   },
+   {
+    "key": "torp_cl4",
+    "slot": "torpedo",
+    "rarity": "blue",
+    "name": "中线四联鱼雷",
+    "stats": {
+     "torpedo": 20
+    }
+   },
+   {
+    "key": "aa_mg",
+    "slot": "aa",
+    "rarity": "white",
+    "name": "机炮群",
+    "stats": {
+     "aa": 5
+    }
+   },
+   {
+    "key": "aa_dpnet",
+    "slot": "aa",
+    "rarity": "blue",
+    "name": "高平炮网",
+    "stats": {
+     "aa": 12
+    }
+   },
+   {
+    "key": "aa_vt",
+    "slot": "aa",
+    "rarity": "purple",
+    "name": "VT引信高炮",
+    "stats": {
+     "aa": 20
+    }
+   },
+   {
+    "key": "el_lookout",
+    "slot": "electronic",
+    "rarity": "white",
+    "name": "瞭望哨",
+    "stats": {
+     "detect": 8
+    }
+   },
+   {
+    "key": "el_radar",
+    "slot": "electronic",
+    "rarity": "blue",
+    "name": "对海雷达",
+    "stats": {
+     "detect": 14
+    }
+   },
+   {
+    "key": "el_fc",
+    "slot": "electronic",
+    "rarity": "purple",
+    "name": "火控雷达",
+    "stats": {
+     "detect": 16,
+     "hit": 8
+    }
+   }
+  ],
+  "ss_attack": [
+   {
+    "key": "hull_std",
+    "slot": "hull",
+    "rarity": "white",
+    "name": "标准艇体",
+    "stats": {
+     "hp": 1.0,
+     "spd": 0
+    }
+   },
+   {
+    "key": "hull_ocean",
+    "slot": "hull",
+    "rarity": "blue",
+    "name": "远洋续航艇体",
+    "stats": {
+     "hp": 0.9,
+     "spd": 1,
+     "range": 1
+    }
+   },
+   {
+    "key": "hull_double",
+    "slot": "hull",
+    "rarity": "blue",
+    "name": "双壳重装艇体",
+    "stats": {
+     "hp": 1.3,
+     "spd": -2
+    }
+   },
+   {
+    "key": "hull_tear",
+    "slot": "hull",
+    "rarity": "purple",
+    "name": "水滴线型艇体",
+    "stats": {
+     "hp": 0.92,
+     "spd": 3,
+     "stealth": 6
+    }
+   },
+   {
+    "key": "eng_dede",
+    "slot": "engine",
+    "rarity": "white",
+    "name": "柴电推进",
+    "stats": {
+     "speed": 12
+    }
+   },
+   {
+    "key": "eng_snorkel",
+    "slot": "engine",
+    "rarity": "blue",
+    "name": "通气管柴油机",
+    "stats": {
+     "speed": 13
+    }
+   },
+   {
+    "key": "eng_aip",
+    "slot": "engine",
+    "rarity": "purple",
+    "name": "AIP动力",
+    "stats": {
+     "speed": 15,
+     "stealth": 8
+    }
+   },
+   {
+    "key": "torp_533",
+    "slot": "torpedo",
+    "rarity": "white",
+    "name": "533mm鱼雷",
+    "stats": {
+     "torpedo": 18
+    }
+   },
+   {
+    "key": "torp_610",
+    "slot": "torpedo",
+    "rarity": "blue",
+    "name": "610mm鱼雷",
+    "stats": {
+     "torpedo": 26
+    }
+   },
+   {
+    "key": "torp_oxygen",
+    "slot": "torpedo",
+    "rarity": "purple",
+    "name": "氧气鱼雷",
+    "stats": {
+     "torpedo": 38
+    }
+   },
+   {
+    "key": "son_listen",
+    "slot": "sonar",
+    "rarity": "white",
+    "name": "听音器",
+    "stats": {
+     "detect": 6
+    }
+   },
+   {
+    "key": "son_active",
+    "slot": "sonar",
+    "rarity": "blue",
+    "name": "主动声呐",
+    "stats": {
+     "detect": 11
+    }
+   },
+   {
+    "key": "son_towed",
+    "slot": "sonar",
+    "rarity": "purple",
+    "name": "拖曳阵列",
+    "stats": {
+     "detect": 16
+    }
+   },
+   {
+    "key": "son_conform",
+    "slot": "sonar",
+    "rarity": "gold",
+    "name": "舷侧共形阵",
+    "stats": {
+     "detect": 22,
+     "stealth": 5
+    }
+   },
+   {
+    "key": "stl_std",
+    "slot": "stealth",
+    "rarity": "white",
+    "name": "标准消声敷设",
+    "stats": {
+     "stealth": 10
+    }
+   },
+   {
+    "key": "stl_tiles",
+    "slot": "stealth",
+    "rarity": "blue",
+    "name": "消声瓦",
+    "stats": {
+     "stealth": 16
+    }
+   },
+   {
+    "key": "stl_pump",
+    "slot": "stealth",
+    "rarity": "purple",
+    "name": "泵喷推进",
+    "stats": {
+     "stealth": 24
+    }
+   }
+  ],
+  "ss_escort": [
+   {
+    "key": "hull_std",
+    "slot": "hull",
+    "rarity": "white",
+    "name": "标准艇体",
+    "stats": {
+     "hp": 1.0,
+     "spd": 0
+    }
+   },
+   {
+    "key": "hull_ocean",
+    "slot": "hull",
+    "rarity": "blue",
+    "name": "远洋续航艇体",
+    "stats": {
+     "hp": 0.9,
+     "spd": 1,
+     "range": 1
+    }
+   },
+   {
+    "key": "hull_double",
+    "slot": "hull",
+    "rarity": "blue",
+    "name": "双壳重装艇体",
+    "stats": {
+     "hp": 1.3,
+     "spd": -2
+    }
+   },
+   {
+    "key": "hull_tear",
+    "slot": "hull",
+    "rarity": "purple",
+    "name": "水滴线型艇体",
+    "stats": {
+     "hp": 0.92,
+     "spd": 3,
+     "stealth": 6
+    }
+   },
+   {
+    "key": "eng_dede",
+    "slot": "engine",
+    "rarity": "white",
+    "name": "柴电推进",
+    "stats": {
+     "speed": 11
+    }
+   },
+   {
+    "key": "eng_snorkel",
+    "slot": "engine",
+    "rarity": "blue",
+    "name": "通气管柴油机",
+    "stats": {
+     "speed": 12
+    }
+   },
+   {
+    "key": "eng_aip",
+    "slot": "engine",
+    "rarity": "purple",
+    "name": "AIP动力",
+    "stats": {
+     "speed": 14,
+     "stealth": 8
+    }
+   },
+   {
+    "key": "torp_short",
+    "slot": "torpedo",
+    "rarity": "white",
+    "name": "短管533鱼雷",
+    "stats": {
+     "torpedo": 10
+    }
+   },
+   {
+    "key": "torp_533",
+    "slot": "torpedo",
+    "rarity": "blue",
+    "name": "533mm鱼雷",
+    "stats": {
+     "torpedo": 16
+    }
+   },
+   {
+    "key": "asw_rail",
+    "slot": "asw",
+    "rarity": "white",
+    "name": "深弹滑轨",
+    "stats": {
+     "asw": 10
+    }
+   },
+   {
+    "key": "asw_hedge",
+    "slot": "asw",
+    "rarity": "blue",
+    "name": "刺猬弹",
+    "stats": {
+     "asw": 16
+    }
+   },
+   {
+    "key": "asw_torp",
+    "slot": "asw",
+    "rarity": "purple",
+    "name": "反潜鱼雷",
+    "stats": {
+     "asw": 24
+    }
+   },
+   {
+    "key": "son_listen",
+    "slot": "sonar",
+    "rarity": "white",
+    "name": "听音器",
+    "stats": {
+     "detect": 6
+    }
+   },
+   {
+    "key": "son_active",
+    "slot": "sonar",
+    "rarity": "blue",
+    "name": "主动声呐",
+    "stats": {
+     "detect": 11
+    }
+   },
+   {
+    "key": "son_towed",
+    "slot": "sonar",
+    "rarity": "purple",
+    "name": "拖曳阵列",
+    "stats": {
+     "detect": 16
+    }
+   },
+   {
+    "key": "son_conform",
+    "slot": "sonar",
+    "rarity": "gold",
+    "name": "舷侧共形阵",
+    "stats": {
+     "detect": 22,
+     "stealth": 5
+    }
+   },
+   {
+    "key": "stl_std",
+    "slot": "stealth",
+    "rarity": "white",
+    "name": "标准消声敷设",
+    "stats": {
+     "stealth": 10
+    }
+   },
+   {
+    "key": "stl_tiles",
+    "slot": "stealth",
+    "rarity": "blue",
+    "name": "消声瓦",
+    "stats": {
+     "stealth": 16
+    }
+   },
+   {
+    "key": "stl_pump",
+    "slot": "stealth",
+    "rarity": "purple",
+    "name": "泵喷推进",
+    "stats": {
+     "stealth": 24
+    }
+   }
+  ],
+  "transport": [
+   {
+    "key": "hull_std",
+    "slot": "hull",
+    "rarity": "white",
+    "name": "标准货轮船体",
+    "stats": {
+     "hp": 1.0,
+     "spd": 0
+    }
+   },
+   {
+    "key": "hull_ocean",
+    "slot": "hull",
+    "rarity": "blue",
+    "name": "远洋货轮船体",
+    "stats": {
+     "hp": 0.95,
+     "spd": 1,
+     "range": 1
+    }
+   },
+   {
+    "key": "hull_ro-ro",
+    "slot": "hull",
+    "rarity": "purple",
+    "name": "加固滚装船体",
+    "stats": {
+     "hp": 1.15,
+     "spd": 0
+    }
+   },
+   {
+    "key": "eng_std",
+    "slot": "engine",
+    "rarity": "white",
+    "name": "商船柴油机",
+    "stats": {
+     "speed": 10
+    }
+   },
+   {
+    "key": "eng_econ",
+    "slot": "engine",
+    "rarity": "blue",
+    "name": "省油主机",
+    "stats": {
+     "speed": 9,
+     "fuel_save": 1
+    }
+   },
+   {
+    "key": "cargo_bulk",
+    "slot": "cargo",
+    "rarity": "white",
+    "name": "标准散货舱",
+    "stats": {
+     "cargo": 100
+    }
+   },
+   {
+    "key": "cargo_ref",
+    "slot": "cargo",
+    "rarity": "blue",
+    "name": "冷藏液货舱",
+    "stats": {
+     "cargo": 140
+    }
+   },
+   {
+    "key": "cargo_troop",
+    "slot": "cargo",
+    "rarity": "purple",
+    "name": "滚装运兵舱",
+    "stats": {
+     "cargo": 80,
+     "troop": 1
+    }
+   },
+   {
+    "key": "cargo_auto",
+    "slot": "cargo",
+    "rarity": "gold",
+    "name": "自动化转运码头",
+    "stats": {
+     "cargo": 200
+    }
+   },
+   {
+    "key": "aa_mg",
+    "slot": "aa",
+    "rarity": "white",
+    "name": "轻机炮",
+    "stats": {
+     "aa": 3
+    }
+   },
+   {
+    "key": "aa_gun",
+    "slot": "aa",
+    "rarity": "blue",
+    "name": "加装高炮",
+    "stats": {
+     "aa": 7
+    }
+   }
+  ],
+  "cv": [
+   {
+    "key": "hull_std",
+    "slot": "hull",
+    "rarity": "white",
+    "name": "改装船体",
+    "stats": {
+     "hp": 1.0,
+     "spd": 0
+    }
+   },
+   {
+    "key": "hull_armor",
+    "slot": "hull",
+    "rarity": "blue",
+    "name": "装甲舰体",
+    "stats": {
+     "hp": 1.15,
+     "spd": -1
+    }
+   },
+   {
+    "key": "eng_std",
+    "slot": "engine",
+    "rarity": "white",
+    "name": "标准主机",
+    "stats": {
+     "speed": 4
+    }
+   },
+   {
+    "key": "eng_fast",
+    "slot": "engine",
+    "rarity": "blue",
+    "name": "高速主机",
+    "stats": {
+     "speed": 6
+    }
+   },
+   {
+    "key": "deck_flush",
+    "slot": "deck",
+    "rarity": "white",
+    "name": "直通甲板",
+    "stats": {
+     "deck_hp": 0,
+     "aa": 0
+    }
+   },
+   {
+    "key": "deck_armor",
+    "slot": "deck",
+    "rarity": "blue",
+    "name": "装甲飞行甲板",
+    "stats": {
+     "deck_hp": 60
+    }
+   },
+   {
+    "key": "deck_angled",
+    "slot": "deck",
+    "rarity": "purple",
+    "name": "斜角甲板",
+    "stats": {
+     "deck_hp": 120
+    }
+   },
+   {
+    "key": "hangar_std",
+    "slot": "hangar",
+    "rarity": "white",
+    "name": "标准机库",
+    "stats": {
+     "hangar": 0
+    }
+   },
+   {
+    "key": "hangar_large",
+    "slot": "hangar",
+    "rarity": "blue",
+    "name": "大型机库",
+    "stats": {
+     "hangar": 1
+    }
+   },
+   {
+    "key": "hangar_exp",
+    "slot": "hangar",
+    "rarity": "purple",
+    "name": "扩大机库",
+    "stats": {
+     "hangar": 2
+    }
+   },
+   {
+    "key": "aa_light",
+    "slot": "aa",
+    "rarity": "white",
+    "name": "轻型防空",
+    "stats": {
+     "aa": 6
+    }
+   },
+   {
+    "key": "aa_med",
+    "slot": "aa",
+    "rarity": "blue",
+    "name": "中程防空",
+    "stats": {
+     "aa": 14
+    }
+   },
+   {
+    "key": "el_basic",
+    "slot": "electronic",
+    "rarity": "white",
+    "name": "基本电台",
+    "stats": {
+     "detect": 1
+    }
+   },
+   {
+    "key": "el_radar",
+    "slot": "electronic",
+    "rarity": "blue",
+    "name": "着舰雷达",
+    "stats": {
+     "detect": 3,
+     "hit": 1
+    }
+   }
+  ]
+ }
 }

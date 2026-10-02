@@ -8,6 +8,7 @@
 """
 import asyncio
 import json
+import logging
 import secrets
 import time
 from collections import defaultdict, deque
@@ -31,10 +32,42 @@ except ImportError:  # pragma: no cover - 无 fastapi 时仅不可用 Web
 from . import webauth
 from .engine import WEB_ORIGIN_PREFIX
 from .router import CONFIRM_WORDS, Router
+from . import pools
 
 STATIC_DIR = Path(__file__).parent / "webstatic"
 PUSH_KEEP = 200          # 每个玩家最多保留多少条待取推送
 BODY_LIMIT = 64 * 1024
+
+# §19.1 舰员档位的中文名（前端直接显示）
+CREW_ZH = {"recruit": "新兵", "veteran": "老练", "ace": "王牌"}
+
+# 设计图鉴要展示的舰船属性（顺序即展示顺序）
+STAT_ZH = {"hp": "耐久", "fire": "火力", "torpedo": "鱼雷", "asw": "反潜",
+           "aa": "防空", "speed": "航速", "detect": "探测", "hit": "命中",
+           "stealth": "隐蔽", "range": "射程", "cargo": "载货", "troop": "运兵",
+           "deck_hp": "甲板", "hangar": "机库", "fuel_save": "节油", "spd": "增速"}
+
+# 图鉴里的舰种展示顺序（由小到大）
+CLASS_ORDER = ("frigate", "destroyer", "light_cruiser", "ss_attack", "ss_escort",
+               "cv", "transport")
+
+logger = logging.getLogger("naval")
+
+
+def _ai_name(conn, side: dict) -> str:
+    """AI 方显示名：优先用舰队名（如「海盗编队」），退回阵营名。"""
+    afid = side.get("ai_fleet_id")
+    if afid is not None:
+        r = conn.execute("SELECT name FROM ai_fleets WHERE id=?", (afid,)).fetchone()
+        if r and r["name"]:
+            return r["name"]
+    if side.get("qq"):
+        r = conn.execute("SELECT name FROM players WHERE qq=?",
+                         (side["qq"],)).fetchone()
+        if r and r["name"]:
+            return r["name"]
+        return str(side["qq"])
+    return "【" + str(side.get("faction") or "AI") + "】"
 
 
 class WebPushBuffer:
@@ -103,7 +136,10 @@ class NavalWeb:
             return {}
         keys = ("qq", "name", "capital_x", "capital_y", "infamy", "morale",
                 "steel", "oil", "aluminium", "rare_earth", "chips", "food",
-                "supply", "manpower", "money", "science", "intel")
+                "supply", "manpower", "money", "science", "intel",
+                # 后续版本新增：通缉热度/税率/航线安全/中立状态
+                "wanted_heat", "tax_rate", "route_security",
+                "is_neutral", "neutral_since")
         return {k: p[k] for k in keys if k in p.keys()}
 
     def _islands(self, qq: str) -> list:
@@ -271,7 +307,516 @@ class NavalWeb:
                 return err("未登录", 401)
             return {"ok": True, "events": self.push_buffer.drain(qq)}
 
+        # ---------- 图形化数据 ----------
+        @app.get("/api/map")
+        async def map_data(request: Request, radius: int = 10,
+                           cx: int = None, cy: int = None):
+            qq = self._qq_from_request(request)
+            if not qq:
+                return err("未登录", 401)
+            d = self._chart_data(qq, max(3, min(30, radius)), (cx, cy))
+            if not d:
+                return err("尚未注册势力", 404)
+            return {"ok": True, **d}
+
+        @app.get("/api/assets")
+        async def assets(request: Request):
+            """舰队 / 舰船 / 设计 / 蓝图 / 队列 —— 给图形化面板用的一次性快照。"""
+            qq = self._qq_from_request(request)
+            if not qq:
+                return err("未登录", 401)
+            return {"ok": True,
+                    "fleets": self._fleets(qq),
+                    "ships": self._ships(qq),
+                    "designs": self._designs(qq),
+                    "buildings": self._buildings(qq),
+                    "queues": self._queues(qq),
+                    # 后续版本新增
+                    "captains": self._captains(qq),
+                    "power": self._power(qq),
+                    "events": self._events(qq),
+                    "research": self._research(qq),
+                    "diplomacy": self._diplomacy(qq)}
+
+        @app.get("/api/battles")
+        async def battles(request: Request, limit: int = 20):
+            """§27.6 与我有关的战斗列表（供战报回放选场）。"""
+            qq = self._qq_from_request(request)
+            if not qq:
+                return err("未登录", 401)
+            return {"ok": True, "battles": self._my_battles(qq, limit)}
+
+        @app.get("/api/battle/{bid}")
+        async def battle_detail(request: Request, bid: int):
+            """§27.6 一场战斗的完整回放数据（逐轮流水 + 功勋表）。"""
+            qq = self._qq_from_request(request)
+            if not qq:
+                return err("未登录", 401)
+            d = self._battle_detail(qq, bid)
+            if not d:
+                return err("找不到该战斗，或你不是参战方", 404)
+            return {"ok": True, **d}
+
         return app
+
+    # ---------- 图形化数据组装 ----------
+    def _chart_data(self, qq: str, radius: int, center: tuple = None):
+        from .game import chart_data
+
+        return chart_data(self.conn, self.cfg, qq, radius, center)
+
+    def _fleets(self, qq: str) -> list:
+        from . import fleet as fleetm
+
+        out = []
+        for f in fleetm.list_fleets(self.conn, qq):
+            try:
+                mission = json.loads(f["mission"] or "{}")
+            except Exception:
+                mission = {}
+            rows = self.conn.execute(
+                "SELECT id,name,tier,hp,max_hp FROM ships WHERE fleet_id=?", (f["id"],)).fetchall()
+            out.append({
+                "id": f["id"], "name": f["name"], "x": f["x"], "y": f["y"],
+                "mission": mission,
+                "speed": fleetm.fleet_speed(self.conn, f["id"]) if hasattr(fleetm, "fleet_speed") else None,
+                "ships": [dict(r) for r in rows],
+            })
+        return out
+
+    def _ships(self, qq: str) -> list:
+        rows = self.conn.execute(
+            "SELECT id,name,tier,hp,max_hp,fleet_id,sub_state,sub_batt,def_id,"
+            "crew_exp,crew_tier FROM ships WHERE qq=? ORDER BY id", (qq,)).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            # 潜艇才需要展示三态；顺带把舰级带给前端做图标
+            cls = None
+            if str(d.get("def_id") or "").isdigit():
+                row = self.conn.execute("SELECT ship_class FROM designs WHERE id=?",
+                                        (int(d["def_id"]),)).fetchone()
+                cls = row["ship_class"] if row else None
+            d["cls"] = cls
+            # §19.1 舰员档位中文名，前端直接用
+            d["crew_label"] = CREW_ZH.get(str(d.get("crew_tier") or "recruit"), "")
+            if not str(cls or "").startswith("ss"):
+                d.pop("sub_state", None)
+                d.pop("sub_batt", None)
+            d.pop("def_id", None)
+            out.append(d)
+        return out
+
+    # ---------- §6.2 外交 / §19.1 指挥官 / §8 事件 / §18.5 电力 ----------
+    def _captains(self, qq: str) -> list:
+        rows = self.conn.execute(
+            "SELECT id,name,skill,level,exp,ship_id FROM captains WHERE qq=?"
+            " ORDER BY level DESC, id", (qq,)).fetchall()
+        skills = (self.cfg.get("captains") or {}).get("skills") or {}
+        out = []
+        for r in rows:
+            d = dict(r)
+            spec = skills.get(d["skill"]) or {}
+            d["skill_name"] = spec.get("name", d["skill"])
+            d["stat"] = spec.get("stat")
+            d["per_level"] = spec.get("per_level", 0)
+            if d.get("ship_id"):
+                s = self.conn.execute("SELECT name FROM ships WHERE id=?",
+                                      (d["ship_id"],)).fetchone()
+                d["ship_name"] = s["name"] if s else None
+            out.append(d)
+        return out
+
+    def _diplomacy(self, qq: str) -> dict:
+        """§6.2 外交面板数据：阵营关系 + 玩家关系 + 条约 + 中立 + 租借港。"""
+        from . import diplomacy as dip
+        from . import relations as rel
+        out = {"factions": [], "players": [], "treaties": [], "leases": [],
+               "neutral": False, "liege": None, "vassals": [], "market": []}
+        try:
+            for r in rel.snapshot(self.conn, self.cfg, qq):
+                out["factions"].append({
+                    "name": r["name"], "state": r["state"],
+                    "state_zh": rel.STATE_ZH.get(r["state"], r["state"]),
+                    "explicit": bool(r.get("explicit")),
+                    "reputation": r.get("reputation"),
+                })
+        except Exception:
+            logger.exception("[海战模拟器] web 外交快照异常")
+        for v in rel.players_snapshot(self.conn, self.cfg, qq):
+            out["players"].append({
+                "qq": v["qq"], "name": v["name"], "state": v["state"],
+                "state_zh": rel.STATE_ZH.get(v["state"], v["state"]),
+                "neutral": rel.is_neutral(self.conn, v["qq"]),
+            })
+        try:
+            now = int(time.time())
+            for t in self.conn.execute(
+                    "SELECT * FROM treaties WHERE expire_at>? AND (a_qq=? OR b_qq=?)",
+                    (now, qq, qq)).fetchall():
+                other = t["b_qq"] if t["a_qq"] == qq else t["a_qq"]
+                nm = self.conn.execute("SELECT name FROM players WHERE qq=?",
+                                       (other,)).fetchone()
+                out["treaties"].append({
+                    "kind": t["kind"], "other": other,
+                    "other_name": nm["name"] if nm else other,
+                    "days_left": max(0, (t["expire_at"] - now) // 86400),
+                    "role": ("宗主" if t["a_qq"] == qq else "附庸")
+                            if t["kind"] == rel.VASSAL else "",
+                })
+            for l in dip.active_leases(self.conn, qq):
+                nm = self.conn.execute("SELECT name FROM players WHERE qq=?",
+                                       (l["owner_qq"],)).fetchone()
+                out["leases"].append({"x": l["x"], "y": l["y"],
+                                      "owner": nm["name"] if nm else l["owner_qq"],
+                                      "days_left": max(0, (l["expire_at"] - now) // 86400)})
+            out["neutral"] = rel.is_neutral(self.conn, qq)
+            out["liege"] = dip.liege_of(self.conn, self.cfg, qq)
+            out["vassals"] = dip.vassals_of(self.conn, self.cfg, qq)
+            # §6.2 市场公开挂单（别人的 + 自己挂的都列，标出归属）
+            now2 = int(time.time())
+            for m in self.conn.execute(
+                    "SELECT * FROM trade_offers WHERE to_qq='' AND status='pending'"
+                    " AND expire_at>? ORDER BY id DESC LIMIT 20",
+                    (now2,)).fetchall():
+                nm = self.conn.execute("SELECT name FROM players WHERE qq=?",
+                                       (m["from_qq"],)).fetchone()
+                out["market"].append({
+                    "id": m["id"], "from_qq": m["from_qq"],
+                    "from_name": nm["name"] if nm else m["from_qq"],
+                    "mine": m["from_qq"] == qq,
+                    "give_res": m["give_res"], "give_amt": m["give_amt"],
+                    "want_res": m["want_res"], "want_amt": m["want_amt"],
+                    "at_war": rel.get_pvp_state(self.conn, self.cfg, qq,
+                                                m["from_qq"]) == rel.WAR,
+                })
+        except Exception:
+            logger.exception("[海战模拟器] web 条约/租借快照异常")
+        return out
+
+    def _events(self, qq: str) -> list:
+        """§8 当前生效的随机事件（个人事件只显示自己的）。"""
+        from . import events as ev
+        tick = self.conn.execute(
+            "SELECT value FROM meta WHERE key='econ_tick'").fetchone()
+        try:
+            tick_v = int(tick["value"]) if tick else 0
+        except (TypeError, ValueError):
+            tick_v = 0
+        out = []
+        for r in ev.active_events(self.conn, tick_v):
+            if r["scope"] == "player" and r["qq"] and r["qq"] != qq:
+                continue
+            spec = (ev.catalog(self.cfg).get(r["event"]) or {})
+            out.append({"event": r["event"], "name": spec.get("name", r["event"]),
+                        "desc": spec.get("desc", ""), "scope": r["scope"],
+                        "eF": spec.get("eF") or {}})
+        return out
+
+    def _power(self, qq: str) -> list:
+        """§18.5 每座己方岛屿的电网供需。"""
+        from .engine import island_power
+        rows = self.conn.execute(
+            "SELECT x,y FROM islands WHERE owner_qq=? ORDER BY x,y", (qq,)).fetchall()
+        out = []
+        for r in rows:
+            pw = island_power(self.conn, self.cfg, r["x"], r["y"])
+            out.append({"x": r["x"], "y": r["y"], "supply": pw["supply"],
+                        "demand": pw["demand"], "shed": len(pw["shed"]),
+                        "half": len(pw["half"]), "oil": pw["oil"]})
+        return out
+
+    def _designs(self, qq: str) -> list:
+        rows = self.conn.execute(
+            "SELECT id,name,ship_class,tier,modules,stats_json,cost_json,work_ticks"
+            " FROM designs WHERE qq=? ORDER BY ship_class,tier,id", (qq,)).fetchall()
+        try:
+            mod_data = pools.mod_data()
+        except Exception:
+            mod_data = {}
+        classes = mod_data.get("classes") or {}
+        slot_names = mod_data.get("slot_names") or {}
+        # 属性展示顺序与中文名（图鉴用）
+        stat_zh = STAT_ZH
+        out = []
+        for r in rows:
+            d = dict(r)
+            mods = {}
+            try:
+                mods = json.loads(d.pop("modules") or "{}")
+            except (TypeError, ValueError):
+                mods = {}
+            for k in ("stats_json", "cost_json"):
+                try:
+                    d[k[:-5]] = json.loads(d.pop(k) or "{}")
+                except (TypeError, ValueError):
+                    d[k[:-5]] = {}
+            d["class_name"] = (classes.get(d["ship_class"]) or {}).get(
+                "name", d["ship_class"])
+            # 装了什么模块（图鉴展开时显示）
+            parts = []
+            for slot, mid in (mods or {}).items():
+                if not mid:
+                    continue
+                try:
+                    info = pools.module_info(mid) or {}
+                except Exception:
+                    info = {}
+                parts.append({
+                    "slot": slot,
+                    "slot_name": slot_names.get(slot, slot),
+                    "name": info.get("name") or mid,
+                })
+            d["modules"] = parts
+            # 航母额外带机库/甲板/单波（§19.15）
+            if str(d["ship_class"]) == "cv":
+                try:
+                    from . import air
+                    d["cv"] = air.cv_spec(self.cfg, int(d["tier"] or 1))
+                except Exception:
+                    d["cv"] = None
+            # 简单的综合战力评分：便于图鉴里横向比较
+            st = d.get("stats") or {}
+            d["power"] = round(
+                float(st.get("hp", 0) or 0) * 0.10
+                + float(st.get("fire", 0) or 0) * 1.0
+                + float(st.get("torpedo", 0) or 0) * 1.2
+                + float(st.get("asw", 0) or 0) * 1.0
+                + float(st.get("aa", 0) or 0) * 0.8
+                + float(st.get("speed", 0) or 0) * 2.0
+                + float(st.get("detect", 0) or 0) * 1.5, 1)
+            d["stats_zh"] = {stat_zh.get(k, k): v
+                             for k, v in (d.get("stats") or {}).items()
+                             if v and k in stat_zh}
+            out.append(d)
+        # 图鉴按「舰种顺序 → 代际」排列（字母序会把航母排到最前，不直观）
+        order = {c: i for i, c in enumerate(CLASS_ORDER)}
+        out.sort(key=lambda x: (order.get(x["ship_class"], 99),
+                                int(x["tier"] or 1), x["id"]))
+        return out
+
+    def _buildings(self, qq: str) -> list:
+        rows = self.conn.execute(
+            "SELECT b.x,b.y,b.def_id,b.level FROM buildings b JOIN islands i"
+            " ON i.x=b.x AND i.y=b.y WHERE i.owner_qq=? ORDER BY b.x,b.y", (qq,)).fetchall()
+        names = (self.cfg.get("buildings") or {})
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["name"] = (names.get(d["def_id"]) or {}).get("name", d["def_id"])
+            out.append(d)
+        return out
+
+    # ---------- §27.6 战报回放 ----------
+    def _my_battles(self, qq: str, limit: int = 20) -> list:
+        """与我有关的战斗列表（A 方，或 PvP 里的 B 方）。"""
+        q = str(qq)
+        rows = self.conn.execute(
+            "SELECT id,tick,end_tick,x,y,status,summary,detail,sides_json,qq,"
+            "ai_fleet_id,rng_seed FROM battles ORDER BY id DESC LIMIT ?",
+            (max(1, min(100, limit)),)).fetchall()
+        out = []
+        for r in rows:
+            try:
+                sides = json.loads(r["sides_json"] or "{}")
+            except (TypeError, ValueError):
+                continue
+            a, b = sides.get("A") or {}, sides.get("B") or {}
+            mine = q in (a.get("qq"), b.get("qq"))
+            if not mine:
+                continue
+            opp = b if a.get("qq") == q else a
+            opp_name = _ai_name(self.conn, opp)
+            if opp.get("qq"):
+                nm = self.conn.execute("SELECT name FROM players WHERE qq=?",
+                                       (opp["qq"],)).fetchone()
+                if nm:
+                    opp_name = nm["name"]
+            nround = self.conn.execute(
+                "SELECT COUNT(DISTINCT round_no) c FROM battle_events WHERE battle_id=?",
+                (r["id"],)).fetchone()["c"]
+            out.append({
+                "id": r["id"], "tick": r["tick"], "x": r["x"], "y": r["y"],
+                "status": r["status"], "opponent": opp_name,
+                "rounds": nround, "detail": r["detail"],
+                "won": "胜利" in (r["summary"] or ""),
+                "lost": "全军覆没" in (r["summary"] or ""),
+            })
+        return out
+
+    def _battle_detail(self, qq: str, bid: int) -> dict:
+        """一场战斗的完整回放数据：逐轮事件 + 功勋表。"""
+        q = str(qq)
+        r = self.conn.execute("SELECT * FROM battles WHERE id=?", (bid,)).fetchone()
+        if not r:
+            return {}
+        try:
+            sides = json.loads(r["sides_json"] or "{}")
+        except (TypeError, ValueError):
+            sides = {}
+        a, b = sides.get("A") or {}, sides.get("B") or {}
+        if q not in (a.get("qq"), b.get("qq")):
+            return {}          # 只允许当事人回放自己的战斗
+
+        def _side_name(sd):
+            if sd.get("qq"):
+                nm = self.conn.execute("SELECT name FROM players WHERE qq=?",
+                                       (sd["qq"],)).fetchone()
+                return nm["name"] if nm else str(sd["qq"])
+            return _ai_name(self.conn, sd)
+
+        evs = self.conn.execute(
+            "SELECT round_no,text FROM battle_events WHERE battle_id=? ORDER BY id",
+            (bid,)).fetchall()
+        rounds = {}
+        for e in evs:
+            rounds.setdefault(int(e["round_no"] or 0), []).append(e["text"])
+        # §27.6 每轮兵力快照（HP 条用）
+        snaps = {}
+        for s in self.conn.execute(
+                "SELECT * FROM battle_rounds WHERE battle_id=? ORDER BY round_no,id",
+                (bid,)).fetchall():
+            snaps[int(s["round_no"] or 0)] = {
+                "a_hp": s["a_hp"], "a_max": s["a_max"], "a_units": s["a_units"],
+                "b_hp": s["b_hp"], "b_max": s["b_max"], "b_units": s["b_units"],
+            }
+        round_list = []
+        for k in sorted(rounds):
+            round_list.append({"no": k, "lines": rounds[k],
+                               "snap": snaps.get(k)})
+        dmg = []
+        for d in self.conn.execute(
+                "SELECT qq,damage,kills,lost FROM battle_damage WHERE battle_id=?"
+                " ORDER BY damage DESC", (bid,)).fetchall():
+            nm = self.conn.execute("SELECT name FROM players WHERE qq=?",
+                                   (d["qq"],)).fetchone()
+            dmg.append({"qq": d["qq"], "name": nm["name"] if nm else d["qq"],
+                        "damage": d["damage"], "kills": d["kills"], "lost": d["lost"]})
+        total = sum(x["damage"] or 0 for x in dmg) or 0
+        for x in dmg:
+            x["share"] = (x["damage"] / total) if total else 0
+        return {
+            "id": r["id"], "x": r["x"], "y": r["y"], "status": r["status"],
+            "detail": r["detail"], "summary": r["summary"] or "",
+            "my_side": "A" if a.get("qq") == q else "B",
+            "a_name": _side_name(a), "b_name": _side_name(b),
+            "rounds": round_list,
+            "damage": dmg,
+        }
+
+    # ---------- 科技树（§19.17 蓝图抽卡 + 研究所等级） ----------
+    def _research(self, qq: str) -> dict:
+        from . import research as rs
+        try:
+            md = pools.mod_data()
+        except Exception:
+            logger.exception("[海战模拟器] 读取模块数据失败")
+            md = {}
+        classes = md.get("classes") or {}
+        arche = md.get("archetypes") or {}
+        rarity_cfg = md.get("rarity") or {}
+        tier_mults = md.get("tier_stat_mult") or []
+        pity_cfg = md.get("pity") or {}
+        info = rs.lab_info(self.conn, qq)
+        lab_lv = info[0] if info else 0
+        proving_lv = info[1] if info else 0
+        slots = rs.research_slots(lab_lv)
+
+        owned = {r["module_id"] for r in self.conn.execute(
+            "SELECT module_id FROM blueprints WHERE qq=?", (qq,)).fetchall()}
+        # 每个 module_id 形如 cls_t{tier}_{key}
+        owned_by = {}
+        for mid in owned:
+            mi = pools.module_info(mid)
+            if not mi:
+                continue
+            k = (mi.get("cls"), int(mi.get("tier") or 1))
+            owned_by[k] = owned_by.get(k, 0) + 1
+
+        # 代际总览：研究所等级 = 可研究池上限（Lv1=T1 … Lv5=T5）
+        tiers = []
+        for t in range(1, 6):
+            total = sum(len(arche.get(c) or []) for c in classes)
+            got = sum(v for (c, tt), v in owned_by.items() if tt == t)
+            tiers.append({
+                "tier": t,
+                "unlocked": lab_lv >= t,
+                "mult": tier_mults[t - 1] if t - 1 < len(tier_mults) else None,
+                "owned": got,
+                "total": total,
+            })
+
+        # 按舰种 × 代际的收集度
+        grid = []
+        for c, spec in classes.items():
+            cells = []
+            for t in range(1, 6):
+                tot = len(arche.get(c) or [])
+                cells.append({"tier": t, "owned": owned_by.get((c, t), 0),
+                              "total": tot})
+            grid.append({"cls": c, "name": spec.get("name", c), "cells": cells,
+                         "slots": spec.get("slots") or []})
+
+        frags = []
+        for r in self.conn.execute(
+                "SELECT tier,rarity,amount FROM fragments WHERE qq=? ORDER BY tier",
+                (qq,)).fetchall():
+            rc = rarity_cfg.get(r["rarity"]) or {}
+            frags.append({"tier": r["tier"], "rarity": r["rarity"],
+                          "rarity_name": rc.get("name", r["rarity"]),
+                          "amount": r["amount"],
+                          "exchange": rc.get("exchange"),
+                          "enough": int(r["amount"] or 0) >= int(rc.get("exchange") or 0)})
+
+        pity = []
+        for r in self.conn.execute(
+                "SELECT * FROM research_pity WHERE qq=?", (qq,)).fetchall():
+            pity.append({"pool": r["pool"], "since_blue": r["since_blue"],
+                         "since_purple": r["since_purple"],
+                         "since_gold": r["since_gold"],
+                         "need_blue": pity_cfg.get("blue"),
+                         "need_purple": pity_cfg.get("purple"),
+                         "need_gold": pity_cfg.get("gold")})
+
+        queue = []
+        now = int(time.time())
+        for r in self.conn.execute(
+                "SELECT * FROM research_queue WHERE qq=? ORDER BY end_ts", (qq,)).fetchall():
+            queue.append({"unit_type": r["unit_type"], "tier": r["tier"],
+                          "mode": r["mode"],
+                          "left": max(0, int(r["end_ts"] or 0) - now)})
+
+        recent = []
+        for r in self.conn.execute(
+                "SELECT module_id,obtained_at FROM blueprints WHERE qq=?"
+                " ORDER BY obtained_at DESC LIMIT 12", (qq,)).fetchall():
+            mi = pools.module_info(r["module_id"]) or {}
+            recent.append({"module_id": r["module_id"],
+                           "name": mi.get("name") or r["module_id"],
+                           "cls": mi.get("cls"), "tier": mi.get("tier"),
+                           "rarity": mi.get("rarity")})
+        return {
+            "lab_level": lab_lv, "proving_level": proving_lv, "slots": slots,
+            "max_tier": lab_lv, "owned_total": len(owned),
+            "pool_total": sum(len(v or []) for v in arche.values()),
+            "tiers": tiers, "grid": grid, "fragments": frags,
+            "pity": pity, "queue": queue, "recent": recent,
+            "rarity": {k: {"name": v.get("name"), "weight": v.get("weight"),
+                           "exchange": v.get("exchange")}
+                       for k, v in rarity_cfg.items()},
+        }
+
+    def _queues(self, qq: str) -> dict:
+        def rows(sql):
+            return json.loads(json.dumps(
+                [dict(r) for r in self.conn.execute(sql, (qq,)).fetchall()],
+                ensure_ascii=False, default=str))
+
+        return {
+            "build": rows("SELECT id,x,y,def_id,target_level,end_tick FROM build_queue WHERE qq=?"),
+            "research": rows("SELECT id,unit_type,tier,mode,end_ts FROM research_queue WHERE qq=?"),
+            "production": rows("SELECT id,x,y,design_id,qty,end_tick FROM production_queue WHERE qq=?"),
+        }
 
     @staticmethod
     def _has_prefix(text: str) -> bool:

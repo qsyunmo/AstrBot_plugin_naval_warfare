@@ -2,7 +2,7 @@
 name: naval_warfare
 version: 0.1.0
 author: local
-description: "海战模拟器：/nw 或 /海战 为前缀的 QQ 文字海战策略游戏（单入口路由、20分钟经济tick、抽卡造舰、破交封锁）"
+description: "海战模拟器：/nw 或 /海战 为前缀的 QQ 文字海战策略游戏（斜杠可省：nw帮助 = /nw帮助；含网页版图形界面）"
 min_astrbot_version: "4.20.0"
 support_platforms:
   - aiocqhttp

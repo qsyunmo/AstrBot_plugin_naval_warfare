@@ -28,5 +28,10 @@
     "description": "Web 版监听地址，0.0.0.0 表示允许外部访问",
     "type": "string",
     "default": "0.0.0.0"
+  },
+  "web_public_url": {
+    "description": "对外访问地址（内网穿透域名），会显示在 nw帮助 里推荐给玩家；留空则只提示端口",
+    "type": "string",
+    "default": ""
   }
 }

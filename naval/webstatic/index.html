@@ -9,49 +9,69 @@
   :root{
     --bg:#0b1723; --panel:#12202e; --panel2:#172939; --line:#20374b;
     --txt:#dbe7f2; --dim:#7f97ad; --acc:#3fa9f5; --acc2:#25d0a5;
-    --warn:#f5b942; --err:#f2555a;
+    --warn:#f5b942; --err:#f2555a; --gold:#e8c46a;
   }
   *{box-sizing:border-box}
-  html,body{height:100%}
   body{
     margin:0;background:radial-gradient(1200px 600px at 50% -10%,#16324a 0%,var(--bg) 60%);
-    color:var(--txt);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--txt);font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
     -webkit-text-size-adjust:100%;
   }
-  .wrap{max-width:900px;margin:0 auto;padding:16px;min-height:100%;display:flex;flex-direction:column}
-  h1{font-size:20px;margin:0;letter-spacing:.5px}
+  .wrap{max-width:980px;margin:0 auto;padding:14px;display:flex;flex-direction:column;gap:12px}
+  h1{font-size:19px;margin:0;letter-spacing:.5px}
   h1 span{color:var(--acc)}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px}
-  /* 登录 */
-  #login{max-width:380px;margin:8vh auto 0;width:100%}
-  #login p.sub{color:var(--dim);font-size:13px;margin:6px 0 18px}
-  label{display:block;font-size:13px;color:var(--dim);margin:12px 0 6px}
-  input{
-    width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line);
-    background:var(--panel2);color:var(--txt);font-size:16px;outline:none;
-  }
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+  input{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line);
+        background:var(--panel2);color:var(--txt);font-size:16px;outline:none}
   input:focus{border-color:var(--acc)}
-  button{
-    cursor:pointer;border:none;border-radius:10px;padding:11px 14px;font-size:15px;
-    background:var(--acc);color:#04121d;font-weight:600;transition:.15s;
-  }
+  button{cursor:pointer;border:none;border-radius:10px;padding:10px 14px;font-size:14px;
+         background:var(--acc);color:#04121d;font-weight:600;transition:.15s}
   button:hover{filter:brightness(1.1)}
-  button:disabled{opacity:.5;cursor:not-allowed}
   button.ghost{background:transparent;color:var(--dim);border:1px solid var(--line);font-weight:400}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  label{display:block;font-size:13px;color:var(--dim);margin:12px 0 6px}
   .row{display:flex;gap:10px;align-items:center}
-  .msg{margin-top:14px;font-size:13px;min-height:18px}
+  .msg{margin-top:12px;font-size:13px;min-height:18px}
   .msg.err{color:var(--err)} .msg.ok{color:var(--acc2)}
+  #login,#setup{max-width:380px;margin:7vh auto 0;width:100%}
+  .banner{background:#3a2f14;border:1px solid #6b5520;color:#ffdf9b;padding:12px 14px;
+          border-radius:12px;font-size:13px;margin-bottom:10px}
   /* 主界面 */
-  #app{display:none;flex-direction:column;gap:12px;height:100%}
-  header.bar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  #app{display:none;flex-direction:column;gap:12px}
+  header.bar{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
   .who{font-size:13px;color:var(--dim)}
   .who b{color:var(--txt)}
-  .res{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+  .res{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
   .chip{background:var(--panel2);border:1px solid var(--line);border-radius:999px;
         padding:3px 10px;font-size:12px;color:var(--dim)}
   .chip b{color:var(--txt);font-weight:600}
-  #console{flex:1;overflow-y:auto;padding:12px;background:#0a1420;border:1px solid var(--line);
-           border-radius:14px;min-height:240px;max-height:52vh;font-size:14px}
+  /* 标签页 */
+  .tabs{display:flex;gap:6px;flex-wrap:wrap}
+  .tabs button{background:var(--panel2);color:var(--dim);border:1px solid var(--line);font-weight:400}
+  .tabs button.on{background:var(--acc);color:#04121d;border-color:var(--acc);font-weight:600}
+  .pane{display:none;flex-direction:column;gap:12px}
+  .pane.on{display:flex}
+  /* 海图 */
+  #mapBox{position:relative;background:#08131f;border:1px solid var(--line);border-radius:14px;padding:12px}
+  canvas{width:100%;height:auto;display:block;border-radius:8px;touch-action:manipulation}
+  .maptools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;font-size:13px;color:var(--dim)}
+  .maptools input[type=range]{flex:1;min-width:120px;padding:0;background:transparent;border:none}
+  .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--dim);margin-top:8px}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;
+            vertical-align:-1px;font-style:normal}
+  #tip{position:absolute;pointer-events:none;background:#04121d;border:1px solid var(--acc);
+       border-radius:8px;padding:6px 9px;font-size:12px;display:none;z-index:5;white-space:nowrap}
+  /* 列表 */
+  .list{display:flex;flex-direction:column;gap:8px}
+  .item{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px}
+  .item b{color:var(--txt)}
+  .item .sub{color:var(--dim);font-size:12px;margin-top:3px}
+  .empty{color:var(--dim);font-size:13px;padding:8px 2px}
+  .bar{height:7px;background:#0a1a26;border-radius:5px;overflow:hidden;margin-top:5px}
+  .bar > i{display:block;height:100%;background:linear-gradient(90deg,var(--acc),var(--acc2))}
+  /* 控制台 */
+  #console{height:44vh;min-height:200px;overflow-y:auto;padding:12px;background:#0a1420;
+           border:1px solid var(--line);border-radius:14px;font-size:14px}
   .line{padding:8px 10px;border-radius:10px;margin-bottom:8px;white-space:pre-wrap;word-break:break-word}
   .line.me{background:#16324a;margin-left:12%}
   .line.bot{background:var(--panel2)}
@@ -60,49 +80,38 @@
   .quick{display:flex;flex-wrap:wrap;gap:6px}
   .quick button{background:var(--panel2);color:var(--txt);border:1px solid var(--line);
                 font-weight:400;padding:7px 11px;font-size:13px}
-  .inputbar{display:flex;gap:8px}
-  .inputbar input{flex:1}
-  #islands{font-size:13px;color:var(--dim)}
-  #islands b{color:var(--txt)}
-  .banner{background:#3a2f14;border:1px solid #6b5520;color:#ffdf9b;
-          padding:12px 14px;border-radius:12px;font-size:13px;margin-bottom:12px}
 </style>
 </head>
 <body>
 <div class="wrap">
 
-  <!-- 登录 -->
   <div id="login" class="card">
     <h1>⚓ 海战<span>模拟器</span></h1>
-    <p class="sub">用 QQ 号 + Web 口令登录</p>
+    <p style="color:var(--dim);font-size:13px;margin:6px 0 14px">用 QQ 号 + Web 口令登录</p>
     <label for="qq">QQ 号</label>
     <input id="qq" inputmode="numeric" autocomplete="username" placeholder="例如 2243683821">
     <label for="pw">Web 口令</label>
-    <input id="pw" type="password" autocomplete="current-password" placeholder="注册时设置的口令">
-    <div class="row" style="margin-top:18px">
-      <button id="btnLogin" style="flex:1">登录</button>
-    </div>
+    <input id="pw" type="password" autocomplete="current-password">
+    <div class="row" style="margin-top:16px"><button id="btnLogin" style="flex:1">登录</button></div>
     <div class="msg" id="loginMsg"></div>
-    <p class="sub" style="margin-top:16px">
-      还没注册？在 QQ 里发：<br><code>/nw注册 &lt;势力名&gt; &lt;口令&gt;</code>
+    <p style="color:var(--dim);font-size:12px;margin-top:14px">
+      还没注册？在 QQ 里发：<br><code>nw注册 &lt;势力名&gt; &lt;口令&gt;</code>
     </p>
   </div>
 
-  <!-- 强制设口令 -->
-  <div id="setup" class="card" style="display:none;max-width:380px;margin:8vh auto 0">
+  <div id="setup" class="card">
     <div class="banner">该账号还没有 Web 口令，请先设置一个再开始游戏。</div>
     <label for="npw">新口令（至少 4 位，不能全数字）</label>
     <input id="npw" type="password" autocomplete="new-password">
     <label for="npw2">再输一次</label>
     <input id="npw2" type="password" autocomplete="new-password">
-    <div class="row" style="margin-top:18px">
+    <div class="row" style="margin-top:16px">
       <button id="btnSet" style="flex:1">设置口令</button>
       <button id="btnQuit" class="ghost">退出</button>
     </div>
     <div class="msg" id="setupMsg"></div>
   </div>
 
-  <!-- 主界面 -->
   <div id="app">
     <header class="bar">
       <div>
@@ -112,180 +121,761 @@
       </div>
       <button class="ghost" id="btnLogout">退出</button>
     </header>
-    <div class="quick" id="quick"></div>
-    <div id="console"></div>
-    <div class="inputbar">
-      <input id="cmd" placeholder="输入指令，如：我 / 建造 矿场 / 研究 驱逐舰 T3" autocomplete="off">
-      <button id="btnSend">发送</button>
-    </div>
-    <div id="islands"></div>
-  </div>
 
+    <div class="tabs" id="tabs"></div>
+
+    <div class="pane on" id="pane-map">
+      <div id="mapBox">
+        <canvas id="cv" width="840" height="840"></canvas>
+        <div id="tip"></div>
+      </div>
+      <div class="maptools">
+        <span>视野半径</span>
+        <input type="range" id="radius" min="4" max="25" value="10">
+        <span id="radiusVal">10</span>
+        <button class="ghost" id="btnRefreshMap">刷新</button>
+        <button class="ghost" id="btnMapReset" style="display:none">↺ 回到首都</button>
+      </div>
+      <div class="legend">
+        <span><i style="background:#3fa9f5"></i>首都</span>
+        <span><i style="background:#25d0a5"></i>己方岛屿</span>
+        <span><i style="background:#4a6377"></i>其他岛屿</span>
+        <span><i style="background:#f5b942"></i>海盗据点</span>
+        <span><i style="background:#f2555a"></i>海盗巡逻队</span>
+        <span><i style="background:#e8c46a"></i>中立商船</span>
+        <span><i style="background:#ff6b3d"></i>执法者</span>
+        <span><i style="background:#d94f4f"></i>正规军</span>
+        <span><i style="background:#e07b39"></i>叛军</span>
+        <span><i style="background:#b07bff"></i>雲墨</span>
+        <span><i style="background:#9fb3c8"></i>残骸</span>
+        <span><i style="background:#25d0a5"></i>同盟</span>
+        <span><i style="background:#f2555a"></i>交战</span>
+        <span><i style="background:#5fd0ff"></i>中立保护</span>
+        <span><i style="background:#f5b942"></i>NAP/飞地</span>
+        <span><i style="background:#c98cff"></i>己方舰队</span>
+        <span id="fogLegend" style="display:none"><i style="background:#0a1520;border:1px solid #20374b"></i>未探明（迷雾）</span>
+      </div>
+      <div class="list" id="mapEntities"></div>
+    </div>
+
+    <div class="pane" id="pane-fleet">
+      <div class="list" id="fleetList"></div>
+    </div>
+
+    <div class="pane" id="pane-diplo">
+      <div class="list" id="diploList"></div>
+    </div>
+
+    <div class="pane" id="pane-tech">
+      <div class="list" id="techList"></div>
+    </div>
+
+    <div class="pane" id="pane-battle">
+      <div class="list" id="battleList"></div>
+      <div class="list" id="battleView"></div>
+    </div>
+
+    <div class="pane" id="pane-assets">
+      <div class="list" id="assetList"></div>
+      <div class="list" id="codexList"></div>
+    </div>
+
+    <div class="pane" id="pane-cmd">
+      <div class="quick" id="quick"></div>
+      <div id="console"></div>
+      <div class="row">
+        <input id="cmd" placeholder="输入指令，如：我 / 建造 矿场 / 研究 驱逐舰 T3" autocomplete="off">
+        <button id="btnSend">发送</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
 const $ = (id) => document.getElementById(id);
 let TOKEN = localStorage.getItem('nw_token') || '';
-let needSet = false;
-let polling = null;
+let needSet = false, polling = null, mapData = null, radius = 10;
 
 async function api(path, opts = {}) {
-  const headers = Object.assign({'Content-Type': 'application/json'}, opts.headers || {});
+  const headers = Object.assign({'Content-Type':'application/json'}, opts.headers || {});
   if (TOKEN) headers['Authorization'] = 'Bearer ' + TOKEN;
   const res = await fetch(path, Object.assign({}, opts, {headers}));
   let data = {};
   try { data = await res.json(); } catch (e) {}
   if (!res.ok || data.ok === false) {
-    const e = new Error(data.error || ('HTTP ' + res.status));
-    e.status = res.status;
-    throw e;
+    const e = new Error(data.error || ('HTTP ' + res.status)); e.status = res.status; throw e;
   }
   return data;
 }
+function esc(s){ return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function fmt(n){ if(n==null) return '0'; return Math.abs(n)>=1000 ? Math.round(n).toLocaleString() : (Math.round(n*10)/10); }
 
-function say(text, cls = 'bot') {
-  const div = document.createElement('div');
-  div.className = 'line ' + cls;
-  div.textContent = text;
-  $('console').appendChild(div);
-  $('console').scrollTop = $('console').scrollHeight;
+/* ---------- 登录 ---------- */
+function show(v){
+  $('login').style.display = v==='login' ? '' : 'none';
+  $('setup').style.display = v==='setup' ? '' : 'none';
+  $('app').style.display   = v==='app'   ? 'flex' : 'none';
 }
-
-function fmt(n) {
-  if (n === null || n === undefined) return '0';
-  return Math.abs(n) >= 1000 ? Math.round(n).toLocaleString() : (Math.round(n * 10) / 10);
-}
-
-const RES = [['steel','钢'],['oil','油'],['aluminium','铝'],['rare_earth','稀土'],
-             ['chips','芯片'],['food','食物'],['supply','补给'],['manpower','人力'],
-             ['money','资金'],['science','科研'],['intel','情报']];
-
-function renderPlayer(p) {
-  if (!p || !p.name) return;
-  $('factionName').textContent = '⚓ ' + p.name;
-  $('who').innerHTML = 'QQ <b>' + p.qq + '</b>　首都 (' + p.capital_x + ',' + p.capital_y +
-                       ')　恶名 <b>' + (p.infamy ?? 0) + '</b>　民心 <b>' + fmt(p.morale) + '</b>';
-  $('res').innerHTML = RES.map(([k, label]) =>
-    '<span class="chip">' + label + ' <b>' + fmt(p[k]) + '</b></span>').join('');
-}
-
-function renderIslands(list) {
-  if (!list || !list.length) { $('islands').textContent = ''; return; }
-  $('islands').innerHTML = '🏝 领地 ' + list.length + ' 座：' + list.map(i => {
-    const ore = Object.entries(i.ore || {}).map(([k,v]) => k + '★' + v).join(' ');
-    return '<b>(' + i.x + ',' + i.y + ')</b> D' + i.dev_level + (ore ? ' ' + ore : '');
-  }).join('　|　');
-}
-
-const QUICK = ['我','资源','岛','队列','排行','帮助','研究 驱逐舰 T3','设计','设计列表','船坞','舰队','海图','战报'];
-
-function renderQuick() {
-  $('quick').innerHTML = '';
-  QUICK.forEach(c => {
-    const b = document.createElement('button');
-    b.textContent = c;
-    b.onclick = () => send(c);
-    $('quick').appendChild(b);
-  });
-}
-
-function show(view) {
-  $('login').style.display = view === 'login' ? '' : 'none';
-  $('setup').style.display = view === 'setup' ? '' : 'none';
-  $('app').style.display = view === 'app' ? 'flex' : 'none';
-}
-
-async function boot() {
+async function boot(){
   if (!TOKEN) return show('login');
   try {
     const d = await api('/api/me');
     if (d.need_set_password) { needSet = true; return show('setup'); }
     enterGame(d);
-  } catch (e) {
-    TOKEN = ''; localStorage.removeItem('nw_token'); show('login');
-  }
+  } catch(e){ TOKEN=''; localStorage.removeItem('nw_token'); show('login'); }
 }
-
-function enterGame(d) {
+function enterGame(d){
   show('app');
   renderPlayer(d.player);
-  renderIslands(d.islands);
-  renderQuick();
-  say('⚓ 欢迎回来，提督。输入指令开始，或点上方快捷按钮。', 'sys');
+  buildTabs();
+  loadMap(); loadAssets();
+  say('⚓ 欢迎回来，提督。可用标签页查看海图/舰队/图鉴，或直接发指令。','sys');
   if (!polling) polling = setInterval(pollEvents, 10000);
 }
 
-async function pollEvents() {
+/* ---------- 顶栏 ---------- */
+const RES = [['steel','钢'],['oil','油'],['aluminium','铝'],['rare_earth','稀土'],['chips','芯片'],
+             ['food','食物'],['supply','补给'],['manpower','人力'],['money','资金'],
+             ['science','科研'],['intel','情报']];
+function renderPlayer(p){
+  if (!p || !p.name) return;
+  $('factionName').textContent = '⚓ ' + p.name;
+  const bits = ['QQ <b>'+esc(p.qq)+'</b>',
+                '首都 ('+p.capital_x+','+p.capital_y+')',
+                '恶名 <b>'+(p.infamy??0)+'</b>',
+                '民心 <b>'+fmt(p.morale)+'</b>'];
+  if (p.wanted_heat != null) bits.push('通缉热度 <b>'+fmt(p.wanted_heat)+'</b>');
+  if (p.route_security != null) bits.push('航线安全 <b>'+fmt(p.route_security)+'</b>');
+  if (p.is_neutral) bits.push('<span style="color:#5fd0ff">🕊 中立观察国</span>');
+  $('who').innerHTML = bits.join('　');
+  $('res').innerHTML = RES.map(([k,l]) =>
+    '<span class="chip">'+l+' <b>'+fmt(p[k])+'</b></span>').join('');
+}
+
+/* ---------- 标签页 ---------- */
+const TABS = [['map','🗺 海图'],['fleet','⚓ 舰队'],['assets','📦 势力'],
+              ['tech','🔬 科技'],['diplo','🕊 外交'],['battle','🎬 战报'],
+              ['cmd','💬 指令']];
+let curTab = 'map';
+function buildTabs(){
+  if ($('tabs').children.length) return;
+  TABS.forEach(([k,label]) => {
+    const b = document.createElement('button');
+    b.textContent = label; b.dataset.k = k;
+    b.onclick = () => switchTab(k);
+    $('tabs').appendChild(b);
+  });
+  switchTab('map');
+}
+function switchTab(k){
+  curTab = k;
+  [...$('tabs').children].forEach(b => b.classList.toggle('on', b.dataset.k === k));
+  TABS.forEach(([t]) => $('pane-'+t).classList.toggle('on', t === k));
+  if (k === 'map') loadMap();
+  if (k === 'fleet' || k === 'assets' || k === 'diplo' || k === 'tech') loadAssets();
+  if (k === 'battle') loadBattles();
+}
+
+/* ---------- 海图 ---------- */
+const COLORS = {capital:'#3fa9f5', own:'#25d0a5', other:'#4a6377',
+                base:'#f5b942', patrol:'#f2555a', fleet:'#c98cff',
+                merchant:'#e8c46a', enforcer:'#ff6b3d',
+                regular:'#d94f4f', guild:'#66d9a0', rebel:'#e07b39',
+                yunmo:'#b07bff', empire_merchant:'#ffd166',
+                wreck:'#9fb3c8', lease:'#5fd0ff'};
+const GLYPH  = {capital:'★', own:'▲', other:'·', base:'⚑', patrol:'✖', fleet:'⛵',
+                merchant:'$', enforcer:'!', regular:'R', guild:'G', rebel:'b',
+                yunmo:'y', empire_merchant:'$', wreck:'w', lease:'⚓'};
+// §6.2 势力图层：他方岛屿按外交关系描边
+const REL_RING = {ally:'#25d0a5', war:'#f2555a', protected:'#5fd0ff', nap:'#f5b942'};
+const REL_NAME = {ally:'同盟', war:'交战', protected:'中立保护', nap:'互不侵犯'};
+
+let mapCenter = null;   // 战报联动：null=以首都为中心
+let mapMark = null;     // 战报联动：{x,y,label}
+async function loadMap(){
+  try {
+    let url = '/api/map?radius=' + radius;
+    if (mapCenter) url += '&cx=' + mapCenter[0] + '&cy=' + mapCenter[1];
+    const d = await api(url);
+    mapData = d; drawMap(); renderMapEntities();
+  } catch(e){ if (curTab==='map') say('海图加载失败：'+e.message,'err'); }
+}
+/* 战报 → 海图联动：定位到交战坐标 */
+function focusOnMap(x, y, label){
+  mapCenter = [x, y];
+  mapMark = {x: x, y: y, label: label || '交战点'};
+  switchTab('map');
+  loadMap();
+}
+function resetMapCenter(){
+  mapCenter = null; mapMark = null; loadMap();
+}
+
+function drawMap(){
+  const cv = $('cv'); if (!cv || !mapData) return;
+  const ctx = cv.getContext('2d');
+  const N = Math.max(mapData.w, mapData.h);
+  const size = cv.width, cell = size / N;
+  ctx.clearRect(0,0,size,size);
+  // 海水底纹
+  ctx.fillStyle = '#08131f'; ctx.fillRect(0,0,size,size);
+  ctx.strokeStyle = 'rgba(63,169,245,.08)'; ctx.lineWidth = 1;
+  for (let i=0;i<=N;i++){
+    ctx.beginPath(); ctx.moveTo(i*cell,0); ctx.lineTo(i*cell,size); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,i*cell); ctx.lineTo(size,i*cell); ctx.stroke();
+  }
+  const px = (x) => (x - mapData.x0 + .5) * cell;
+  const py = (y) => (y - mapData.y0 + .5) * cell;
+  // 战争迷雾：未探明格子压暗（己方目标必在视野内，画在其上不受影响）
+  if (mapData.vision) {
+    for (let ry = 0; ry < mapData.h; ry++)
+      for (let rx = 0; rx < mapData.w; rx++)
+        if (!mapData.vision[ry][rx]) {
+          ctx.fillStyle = 'rgba(3,8,15,.80)';
+          ctx.fillRect(rx*cell, ry*cell, cell, cell);
+        }
+  }
+  const draw = (x, y, kind, label) => {
+    ctx.fillStyle = COLORS[kind] || '#888';
+    ctx.beginPath(); ctx.arc(px(x), py(y), cell*0.34, 0, Math.PI*2); ctx.fill();
+    if (cell > 14) {
+      ctx.fillStyle = '#04121d'; ctx.font = 'bold ' + Math.round(cell*0.46) + 'px sans-serif';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(GLYPH[kind] || '?', px(x), py(y)+1);
+    }
+  };
+  (mapData.islands||[]).forEach(o => {
+    draw(o.x,o.y,o.kind);
+    // §6.2 势力图层：外交关系描边
+    const ring = REL_RING[o.rel];
+    if (ring){
+      ctx.strokeStyle = ring; ctx.lineWidth = Math.max(1.5, cell*0.10);
+      ctx.beginPath(); ctx.arc(px(o.x), py(o.y), cell*0.44, 0, Math.PI*2); ctx.stroke();
+    }
+    // §18.3 飞地警示：无港链回首都，产出 ×0.5
+    if (o.feat){
+      ctx.fillStyle = '#f5b942';
+      ctx.beginPath();
+      ctx.arc(px(o.x)+cell*0.30, py(o.y)-cell*0.30, cell*0.13, 0, Math.PI*2);
+      ctx.fill();
+    }
+  });
+  (mapData.leases ||[]).forEach(o => draw(o.x,o.y,'lease'));
+  (mapData.pirates||[]).forEach(o => draw(o.x,o.y,o.kind));
+  (mapData.wrecks ||[]).forEach(o => draw(o.x,o.y,'wreck'));
+  (mapData.fleets ||[]).forEach(o => draw(o.x,o.y,'fleet'));
+  // 视野外边框提示
+  ctx.strokeStyle='rgba(63,169,245,.5)'; ctx.lineWidth=2; ctx.strokeRect(1,1,size-2,size-2);
+  ctx.fillStyle='#7f97ad'; ctx.font='12px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText('北 ↑  中心 '+mapData.center[0]+','+mapData.center[1], 6, 6);
+  // 战报联动标记：交战点
+  if (mapMark){
+    const mx = px(mapMark.x), my = py(mapMark.y);
+    ctx.strokeStyle = '#ff3b3b'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(mx, my, cell*0.62, 0, Math.PI*2); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(mx - cell*0.85, my); ctx.lineTo(mx - cell*0.40, my);
+    ctx.moveTo(mx + cell*0.40, my); ctx.lineTo(mx + cell*0.85, my);
+    ctx.moveTo(mx, my - cell*0.85); ctx.lineTo(mx, my - cell*0.40);
+    ctx.moveTo(mx, my + cell*0.40); ctx.lineTo(mx, my + cell*0.85);
+    ctx.stroke();
+    ctx.fillStyle = '#ff6b6b'; ctx.font = 'bold 12px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText('⚔ ' + mapMark.label, mx, my - cell*0.9);
+  }
+  const fl = $('fogLegend'); if (fl) fl.style.display = mapData.fog ? '' : 'none';
+  const rb = $('btnMapReset'); if (rb) rb.style.display = mapCenter ? '' : 'none';
+}
+
+function renderMapEntities(){
+  const box = $('mapEntities'); if (!mapData) return;
+  const parts = [];
+  (mapData.islands||[]).forEach(i => {
+    const rel = REL_NAME[i.rel] ? ('　<span style="color:'+REL_RING[i.rel]+
+      '">●'+REL_NAME[i.rel]+'</span>') : '';
+    const feat = i.feat ? '　<span style="color:#f5b942">⚠飞地(产出×0.5)</span>' : '';
+    parts.push(
+      '<div class="item"><b>'+(i.kind==='capital'?'★ 首都':i.kind==='own'?'▲ 己方岛屿'
+        :i.kind==='regular'?'R 正规军领土':'· 其他岛屿')+
+      '</b> ('+i.x+','+i.y+')'+rel+feat+'</div>');
+  });
+  (mapData.leases||[]).forEach(l => parts.push(
+    '<div class="item"><b>⚓ 租借军港</b> ('+l.x+','+l.y+')　剩 '+
+    (l.days_left != null ? l.days_left+' 天' : '—')+'</div>'));
+  (mapData.pirates||[]).forEach(p => parts.push(
+    '<div class="item"><b>'+(p.kind==='patrol'?'✖ 海盗巡逻队':p.kind==='merchant'?'$ 中立商船'
+      :p.kind==='enforcer'?'! 跨国执法者':'⚑ 海盗据点')+'</b> '+
+    esc(p.name||'')+' ('+p.x+','+p.y+')'+
+    (p.kind==='patrol'?'<div class="sub"><button class="ghost" data-act="attack" data-x="'+p.x+
+      '" data-y="'+p.y+'">派舰队攻击</button></div>':'')+'</div>'));
+  (mapData.wrecks||[]).forEach(w => parts.push(
+    '<div class="item"><b>'+(w.kind==='yunmo'?'☢️ 雲墨残骸区':'⚓ 沉船遗迹')+
+    '</b> ('+w.x+','+w.y+')　剩 '+w.remaining+' 次'+
+    '<div class="sub"><button class="ghost" data-act="salvage" data-x="'+w.x+
+    '" data-y="'+w.y+'">派舰队打捞</button></div></div>'));
+  (mapData.fleets||[]).forEach(f => parts.push(
+    '<div class="item"><b>⛵ '+esc(f.name)+'</b> ('+f.x+','+f.y+')</div>'));
+  box.innerHTML = parts.length ? parts.join('') : '<div class="empty">视野内暂无目标。</div>';
+  box.querySelectorAll('button[data-act=attack]').forEach(b => b.onclick = () => {
+    switchTab('cmd'); $('cmd').value = '攻击 ' + (mapData.fleets[0] ? mapData.fleets[0].name : '') +
+      ' ' + b.dataset.x + ',' + b.dataset.y; $('cmd').focus();
+  });
+  box.querySelectorAll('button[data-act=salvage]').forEach(b => b.onclick = () => {
+    switchTab('cmd'); $('cmd').value = '打捞 ' + (mapData.fleets[0] ? mapData.fleets[0].name : '') +
+      ' ' + b.dataset.x + ',' + b.dataset.y; $('cmd').focus();
+  });
+}
+
+/* ---------- 舰队 / 势力 ---------- */
+async function loadAssets(){
+  try {
+    const d = await api('/api/assets');
+    renderFleets(d);
+    renderAssets(d);
+    renderDesigns(d);
+    renderDiplo(d);
+    renderTech(d);
+  } catch(e){}
+}
+const SUB_STATE = {surface:'水面', periscope:'潜望镜', deep:'深潜'};
+function shipLine(s){
+  const sub = s.sub_state ? '　🌊'+ (SUB_STATE[s.sub_state]||s.sub_state) +
+      (s.sub_batt == null ? '' : '｜电'+s.sub_batt) : '';
+  // §19.1 舰员经验档位
+  const crew = s.crew_label ? '　🎗'+esc(s.crew_label)+'('+(s.crew_exp||0)+')' : '';
+  return '<div class="sub">'+ (s.cls && String(s.cls).startsWith('ss') ? '🦈 ' : '· ') +
+    esc(s.name)+' T'+s.tier+'　HP '+fmt(s.hp)+'/'+fmt(s.max_hp)+sub+crew+
+    (s.fleet_id?'':'　（在港）') + '</div>';
+}
+/* ---------- 🕊 外交 ---------- */
+function renderDiplo(d){
+  const box = $('diploList'); if (!box) return;
+  const dp = d.diplomacy || {};
+  const out = [];
+  if (dp.neutral){
+    out.push('<div class="item"><b>🕊 中立观察国</b><div class="sub">'+
+      '任何玩家都无法攻击你；代价是你不能宣战、不能使用间谍。</div></div>');
+  }
+  // 玩家
+  const ps = dp.players || [];
+  out.push('<div class="item"><b>🧑‍✈️ 其他提督</b>' + (ps.length ? ps.map(p =>
+    '<div class="sub">'+ (p.neutral?'🕊 ': (p.state==='war'?'⚔️ ': (p.state==='allied'?'🤝 ':'➖ '))) +
+    esc(p.name) +'　'+ esc(p.state_zh) + (p.neutral?'（受中立保护）':'') +
+    '</div>').join('') : '<div class="sub">暂无其他玩家</div>') + '</div>');
+  // 阵营
+  const fs = dp.factions || [];
+  out.push('<div class="item"><b>🌐 阵营关系</b>' + (fs.length ? fs.map(f =>
+    '<div class="sub">'+ (f.state==='war'?'⚔️ ': (f.state==='peace'?'🤝 ':(f.state==='allied'?'🤝 ':'➖ '))) +
+    esc(f.name) +'　'+ esc(f.state_zh) +
+    (f.reputation!=null?('　声望 '+fmt(f.reputation)):'') +
+    (f.explicit?'　★':'') + '</div>').join('') : '<div class="sub">暂无</div>') + '</div>');
+  // 条约
+  const ts = dp.treaties || [];
+  out.push('<div class="item"><b>📜 条约</b>' + (ts.length ? ts.map(t =>
+    '<div class="sub">'+ (t.kind==='vassal'?'🏳 保护关系':'📜 互不侵犯') +
+    '（与 '+esc(t.other_name)+'）' + (t.role?('　你是'+t.role):'') +
+    '　剩 '+t.days_left+' 天</div>').join('') : '<div class="sub">无生效条约</div>') + '</div>');
+  // 租借军港
+  const ls = dp.leases || [];
+  out.push('<div class="item"><b>⚓ 租借军港</b>' + (ls.length ? ls.map(l =>
+    '<div class="sub">('+l.x+','+l.y+')　东家 '+esc(l.owner)+'　剩 '+l.days_left+' 天</div>'
+    ).join('') : '<div class="sub">无</div>') + '</div>');
+  // 宗主 / 附庸
+  if (dp.liege || (dp.vassals||[]).length){
+    const bits = [];
+    if (dp.liege) bits.push('你是 <b>'+esc(dp.liege)+'</b> 的附庸');
+    if ((dp.vassals||[]).length) bits.push('你的附庸：'+ (dp.vassals||[]).map(esc).join('、'));
+    out.push('<div class="item"><b>🏳 保护关系</b><div class="sub">'+bits.join('　')+'</div></div>');
+  }
+  // 生效事件（§8）
+  const es = d.events || [];
+  if (es.length){
+    out.push('<div class="item"><b>📢 生效事件</b>' + es.map(e =>
+      '<div class="sub">'+esc(e.name)+'　'+esc(e.desc||'')+
+      (Object.keys(e.eF||{}).length?('　产出 '+Object.entries(e.eF).map(([k,v])=>k+'×'+v).join('、')):'')+
+      '</div>').join('') + '</div>');
+  }
+  // §6.2 市场公开挂单
+  const mk = dp.market || [];
+  if (mk.length){
+    out.push('<div class="item"><b>🏪 市场挂单</b>' + mk.map(m =>
+      '<div class="sub">#'+m.id+'　'+(m.mine?'（我挂的）':'【'+esc(m.from_name)+'】')+
+      '给 '+fmt(m.give_amt)+' '+esc(m.give_res)+
+      ' ↔ 要 '+fmt(m.want_amt)+' '+esc(m.want_res)+
+      (m.at_war ? '　<span style="color:#f2555a">⚔ 交战不可接</span>'
+                : (m.mine ? '' : '　<button class="ghost" data-trade="'+m.id+
+                   '">接单</button>'))+
+      '</div>').join('') + '</div>');
+  }
+  box.innerHTML = out.join('');
+  box.querySelectorAll('button[data-trade]').forEach(b => b.onclick = () => {
+    switchTab('cmd'); $('cmd').value = '贸易接受 ' + b.dataset.trade; $('cmd').focus();
+  });
+}
+function renderFleets(d){
+  const box = $('fleetList');
+  if (!d.fleets || !d.fleets.length) { box.innerHTML = '<div class="empty">还没有舰队。造好船后用指令创建：<code>舰队 &lt;名字&gt;</code></div>'; return; }
+  box.innerHTML = d.fleets.map(f => {
+    const m = f.mission || {};
+    const mv = m.type ? '　任务：'+esc(m.type)+(m.target_x!=null?(' → ('+m.target_x+','+m.target_y+')'):'') : '';
+    const ships = (f.ships||[]).map(shipLine).join('');
+    return '<div class="item"><b>⛵ '+esc(f.name)+'</b>　('+f.x+','+f.y+')'+
+           (f.speed?('　航速 '+f.speed):'')+mv+
+           '<div class="sub">'+((f.ships||[]).length)+' 艘</div>'+ships+'</div>';
+  }).join('');
+}
+function renderAssets(d){
+  const out = [];
+  out.push('<div class="item"><b>🏝 建筑</b>' +
+    ((d.buildings||[]).length ? (d.buildings||[]).map(b =>
+      '<div class="sub">'+esc(b.name)+' Lv'+b.level+'　('+b.x+','+b.y+')</div>').join('')
+      : '<div class="sub">暂无</div>') + '</div>');
+  out.push('<div class="item"><b>📐 舰船设计</b>' +
+    ((d.designs||[]).length ? (d.designs||[]).map(x =>
+      '<div class="sub">'+esc(x.name)+'　'+esc(x.ship_class)+' T'+x.tier+'</div>').join('')
+      : '<div class="sub">暂无，用 <code>设计</code> 进入设计模式</div>') + '</div>');
+  out.push('<div class="item"><b>🚢 舰船</b>' +
+    ((d.ships||[]).length ? (d.ships||[]).map(shipLine).join('')
+      : '<div class="sub">暂无</div>') + '</div>');
+  // §19.1 指挥官/舰长
+  const caps = d.captains || [];
+  out.push('<div class="item"><b>🎖 舰长</b>' + (caps.length ? caps.map(c =>
+    '<div class="sub">'+esc(c.name)+'　'+esc(c.skill_name)+' Lv'+c.level+
+    '　经验 '+c.exp+(c.ship_name?('　任职 '+esc(c.ship_name)):'　待命')+'</div>').join('')
+    : '<div class="sub">暂无，用 <code>招募舰长</code> 招募</div>') + '</div>');
+  // §18.5 电力
+  const pw = d.power || [];
+  if (pw.length){
+    out.push('<div class="item"><b>⚡ 电网</b>' + pw.map(p =>
+      '<div class="sub">('+p.x+','+p.y+')　供电 '+Math.round(p.supply)+
+      ' / 用电 '+Math.round(p.demand)+
+      (p.demand > p.supply ? ('　⚠️ 断电 '+p.shed+' 处'+(p.half?('、半产 '+p.half+' 处'):''))
+                           : '　✅ 平衡') +
+      (p.oil?('　耗油 '+p.oil+'/日'):'') + '</div>').join('') + '</div>');
+  }
+  const q = d.queues || {};
+  const ql = [['build','建造'],['research','研究'],['production','生产']].map(([k,l]) =>
+    '<div class="sub">'+l+'：'+((q[k]||[]).length)+' 项</div>').join('');
+  out.push('<div class="item"><b>⏳ 队列</b>'+ql+'</div>');
+  $('assetList').innerHTML = out.join('');
+}
+
+/* ---------- 🎬 战报回放 ---------- */
+let battleData = null, replayRound = 0, replayTimer = null;
+async function loadBattles(){
+  const box = $('battleList'); if (!box) return;
+  try {
+    const d = await api('/api/battles');
+    const bs = d.battles || [];
+    if (!bs.length){
+      box.innerHTML = '<div class="empty">还没有战斗记录。用指令开一场就有了。</div>';
+      $('battleView').innerHTML = '';
+      return;
+    }
+    box.innerHTML = '<div class="item"><b>🎬 我的战斗</b>' + bs.map(b =>
+      '<div class="sub" style="cursor:pointer" data-bid="'+b.id+'">'+
+      (b.won?'🏆':(b.lost?'☠️':'↩️')) + ' #'+b.id+'　vs '+esc(b.opponent)+
+      '　('+b.x+','+b.y+')　'+b.rounds+' 轮　'+
+      (b.detail?esc(b.detail):(b.status==='active'?'进行中':'已结束'))+
+      '</div>').join('') + '</div>';
+    box.querySelectorAll('[data-bid]').forEach(el => el.onclick = () => openBattle(+el.dataset.bid));
+  } catch(e){ box.innerHTML = '<div class="empty">战报加载失败：'+esc(e.message)+'</div>'; }
+}
+async function openBattle(bid){
+  try {
+    battleData = await api('/api/battle/' + bid);
+    replayRound = 0; stopReplay(); renderBattle();
+  } catch(e){ $('battleView').innerHTML = '<div class="empty">'+esc(e.message)+'</div>'; }
+}
+function stopReplay(){ if (replayTimer){ clearInterval(replayTimer); replayTimer = null; } }
+function hpBar(label, hp, mx, units){
+  const pct = mx > 0 ? Math.max(0, Math.min(100, hp / mx * 100)) : 0;
+  const color = pct > 66 ? '#25d0a5' : (pct > 33 ? '#f5b942' : '#f2555a');
+  return '<div class="sub">'+esc(label)+'　'+fmt(hp)+' / '+fmt(mx)+
+    '　舰船 '+units+'　<b>'+pct.toFixed(0)+'%</b>'+
+    '<div style="height:10px;background:#12222f;border-radius:5px;margin-top:3px;overflow:hidden">'+
+    '<div style="height:100%;width:'+pct.toFixed(1)+'%;background:'+color+'"></div></div></div>';
+}
+function renderBattle(){
+  const box = $('battleView'); if (!box || !battleData) return;
+  const d = battleData;
+  const total = (d.rounds||[]).length;
+  const out = [];
+  out.push('<div class="item"><b>🎬 战斗 #'+d.id+'</b>　('+d.x+','+d.y+')'+
+    '<div class="sub">'+esc(d.a_name)+' vs '+esc(d.b_name)+
+    '　你属 '+d.my_side+' 方</div>'+
+    '<div class="sub">'+(d.detail?esc(d.detail):'')+'</div>'+
+    '<div class="sub"><button class="ghost" id="rvMap">🗺 在海图上查看这一战</button></div>'+
+    '</div>');
+  // 兵力变化（取当前轮的快照；第 0 轮是开战前）
+  const shown = (d.rounds||[]).slice(0, replayRound);
+  let snap = null;
+  for (const r of shown) if (r.snap) snap = r.snap;
+  if (!snap && total) snap = (d.rounds[0]||{}).snap;
+  if (snap){
+    const aLabel = d.a_name + (d.my_side==='A' ? '（你）' : '');
+    const bLabel = d.b_name + (d.my_side==='B' ? '（你）' : '');
+    out.push('<div class="item"><b>❤️ 兵力对比</b>' +
+      hpBar(aLabel, snap.a_hp, snap.a_max, snap.a_units) +
+      hpBar(bLabel, snap.b_hp, snap.b_max, snap.b_units) + '</div>');
+  }
+  // 功勋表
+  if ((d.damage||[]).length){
+    out.push('<div class="item"><b>📊 战功与伤害贡献</b>' + d.damage.map(x =>
+      '<div class="sub">'+esc(x.name)+'　伤害 '+fmt(x.damage)+
+      '（'+(x.share*100).toFixed(0)+'%）　击沉 '+x.kills+'　承受 '+fmt(x.lost)+
+      '</div>').join('') + '</div>');
+  }
+  // 回放控制
+  out.push('<div class="item"><b>⏯ 逐轮回放</b>'+
+    '<div class="sub">第 <b id="rvNo">'+replayRound+'</b> / '+total+' 轮</div>'+
+    '<div class="sub">'+
+    '<button class="ghost" id="rvPrev">◀ 上一轮</button> '+
+    '<button class="ghost" id="rvNext">下一轮 ▶</button> '+
+    '<button class="ghost" id="rvPlay">▶ 自动播放</button> '+
+    '<button class="ghost" id="rvStop">⏸ 停止</button>'+
+    '</div></div>');
+  out.push('<div class="item"><b>📜 流水</b>' + (shown.length ? shown.map(r =>
+    '<div class="sub"><b>—— 第'+r.no+'轮 ——</b></div>' +
+    r.lines.map(l => '<div class="sub">'+esc(l)+'</div>').join('')
+    ).join('') : '<div class="sub">点「下一轮 ▶」开始回放</div>') + '</div>');
+  if (replayRound >= total && d.summary){
+    out.push('<div class="item"><b>🏁 战报</b>' +
+      d.summary.split('\n').map(l => '<div class="sub">'+esc(l)+'</div>').join('') + '</div>');
+  }
+  box.innerHTML = out.join('');
+  if ($('rvMap')) $('rvMap').onclick = () => focusOnMap(d.x, d.y, '#'+d.id);
+  $('rvPrev').onclick = () => { stopReplay(); replayRound = Math.max(0, replayRound-1); renderBattle(); };
+  $('rvNext').onclick = () => { stopReplay(); replayRound = Math.min(total, replayRound+1); renderBattle(); };
+  $('rvStop').onclick = () => { stopReplay(); };
+  $('rvPlay').onclick = () => {
+    stopReplay();
+    if (replayRound >= total) replayRound = 0;
+    replayTimer = setInterval(() => {
+      replayRound++;
+      if (replayRound > total){ stopReplay(); return; }
+      renderBattle();
+      if (replayRound >= total) stopReplay();
+    }, 900);
+  };
+}
+
+/* ---------- 📐 设计图鉴 ---------- */
+const STAT_ORDER = ['hp','fire','torpedo','asw','aa','speed','detect','hit'];
+const STAT_MAX = {hp:2500, fire:60, torpedo:70, asw:50, aa:40, speed:26, detect:20, hit:8};
+const STAT_LABEL = {hp:'耐久', fire:'火力', torpedo:'鱼雷', asw:'反潜',
+                    aa:'防空', speed:'航速', detect:'探测', hit:'命中'};
+const COST_LABEL = {steel:'钢', oil:'油', money:'资金', manpower:'人力',
+                    aluminium:'铝', rare_earth:'稀土'};
+function statBar(label, val, ref){
+  const pct = ref > 0 ? Math.max(0, Math.min(100, val / ref * 100)) : 0;
+  return '<div class="sub" style="display:flex;align-items:center;gap:6px">'+
+    '<span style="width:32px;color:#7f97ad">'+esc(label)+'</span>'+
+    '<span style="flex:1;height:8px;background:#12222f;border-radius:4px;overflow:hidden">'+
+    '<span style="display:block;height:100%;width:'+pct.toFixed(1)+'%;background:#3fa9f5"></span></span>'+
+    '<span style="width:48px;text-align:right"><b>'+val+'</b></span></div>';
+}
+function renderDesigns(d){
+  const box = $('codexList'); if (!box) return;
+  const ds = d.designs || [];
+  if (!ds.length){
+    box.innerHTML = '<div class="empty">还没有设计。用指令 <code>设计</code> 进入设计模式，'+
+      '或 <code>设计列表</code> 查看。</div>';
+    return;
+  }
+  // 同一玩家内取最大值做参照，条长才有可比性
+  const localMax = {};
+  STAT_ORDER.forEach(k => {
+    localMax[k] = Math.max(...ds.map(x => Number((x.stats||{})[k]) || 0), 1);
+  });
+  box.innerHTML = ds.map(x => {
+    const st = x.stats || {};
+    const bars = STAT_ORDER.filter(k => (Number(st[k])||0) > 0).map(k =>
+      statBar(STAT_LABEL[k] || k, Number(st[k])||0,
+              Math.max(localMax[k], (STAT_MAX[k]||100) * 0.35))).join('');
+    const cost = Object.entries(x.cost || {})
+      .map(([k,v]) => COST_LABEL[k] ? (COST_LABEL[k]+' '+fmt(v)) : (k+' '+fmt(v)))
+      .join('　');
+    const mods = (x.modules || []).map(m =>
+      esc(m.slot_name)+'：'+esc(m.name)).join('　');
+    const cv = x.cv ? ('　🛩 机库'+x.cv.hangar+' 单波'+x.cv.wave+
+                       ' 甲板'+x.cv.deck_hp+'　'+esc(x.cv.name)) : '';
+    return '<div class="item"><b>📐 '+esc(x.name)+'</b>'+
+      '<div class="sub">'+esc(x.class_name)+'　T'+x.tier+
+      '　综合战力 <b style="color:#25d0a5">'+x.power+'</b>'+cv+'</div>'+
+      bars+
+      (mods ? '<div class="sub" style="margin-top:4px;color:#7f97ad">🔧 '+mods+'</div>' : '')+
+      '<div class="sub" style="margin-top:4px">💰 '+cost+'</div></div>';
+  }).join('');
+}
+
+/* ---------- 🔬 科技树 ---------- */
+const RARITY_COLOR = {white:'#8fa3b5', blue:'#3fa9f5', purple:'#b07bff', gold:'#f5b942'};
+function renderTech(d){
+  const box = $('techList'); if (!box) return;
+  const r = d.research || {};
+  const out = [];
+  // 研究所概览
+  out.push('<div class="item"><b>🔬 研究所 Lv'+(r.lab_level||0)+'</b>'+
+    '<div class="sub">并行研究位 <b>'+(r.slots||0)+'</b>　可研究上限 '+
+    '<b>T'+(r.max_tier||0)+'</b>'+
+    (r.proving_level ? ('　试验场 Lv'+r.proving_level) : '')+'</div>'+
+    '<div class="sub">蓝图收集 <b>'+(r.owned_total||0)+'</b> / '+(r.pool_total||0)+
+    '</div>'+
+    ((r.lab_level||0) < 5 ? '<div class="sub">建/升级研究所可解锁更高的 T 池'+
+      '（Lv1=T1 … Lv5=T5）</div>' : '')+
+    '</div>');
+  // 代际进度
+  const tiers = r.tiers || [];
+  if (tiers.length){
+    out.push('<div class="item"><b>📶 代际进度</b>' + tiers.map(t => {
+      const pct = t.total > 0 ? (t.owned / t.total * 100) : 0;
+      return '<div class="sub" style="display:flex;align-items:center;gap:8px">'+
+        '<span style="width:34px;color:'+(t.unlocked?'#25d0a5':'#5a6e80')+'">T'+t.tier+'</span>'+
+        '<span style="flex:1;height:9px;background:#12222f;border-radius:4px;overflow:hidden">'+
+        '<span style="display:block;height:100%;width:'+pct.toFixed(1)+'%;background:'+
+        (t.unlocked?'#3fa9f5':'#33475a')+'"></span></span>'+
+        '<span style="width:110px;text-align:right;color:#7f97ad">'+
+        (t.unlocked ? (t.owned+'/'+t.total) : '🔒 未解锁')+
+        (t.mult ? ('　×'+t.mult) : '')+'</span></div>';
+    }).join('') + '</div>');
+  }
+  // 研究队列
+  const q = r.queue || [];
+  if (q.length){
+    out.push('<div class="item"><b>⏳ 研究队列</b>' + q.map(x => {
+      const m = Math.floor(x.left/60), sec = x.left % 60;
+      return '<div class="sub">'+esc(x.unit_type)+' T'+x.tier+
+        (x.mode==='express'?'（加急）':'')+'　剩 '+m+'分'+sec+'秒</div>';
+    }).join('') + '</div>');
+  }
+  // 碎片与保底
+  const fr = r.fragments || [];
+  out.push('<div class="item"><b>🧩 蓝图碎片</b>' + (fr.length ? fr.map(f =>
+    '<div class="sub">T'+f.tier+'　<span style="color:'+
+    (RARITY_COLOR[f.rarity]||'#888')+'">'+esc(f.rarity_name)+'</span>'+
+    '　'+f.amount+' / '+f.exchange+
+    (f.enough?'　<b style="color:#25d0a5">可兑换</b>':'')+'</div>').join('')
+    : '<div class="sub">暂无碎片（重复蓝图会转为碎片，可攒够兑换指定模块）</div>') +
+    '</div>');
+  const pt = r.pity || [];
+  if (pt.length){
+    out.push('<div class="item"><b>🎯 保底计数</b>' + pt.map(p =>
+      '<div class="sub">'+esc(p.pool)+'　距蓝 '+(p.since_blue||0)+'/'+p.need_blue+
+      '　距紫 '+(p.since_purple||0)+'/'+p.need_purple+
+      '　距金 '+(p.since_gold||0)+'/'+p.need_gold+'</div>').join('') + '</div>');
+  }
+  // 收集网格（舰种 × 代际）
+  const grid = r.grid || [];
+  if (grid.length){
+    out.push('<div class="item"><b>🗺 收集度（舰种 × 代际）</b>' + grid.map(g =>
+      '<div class="sub">'+esc(g.name)+'　' + g.cells.map(c => {
+        const fl = c.owned > 0 ? '#3fa9f5' : '#1b2b39';
+        const txt = c.owned >= c.total && c.total > 0 ? '#25d0a5' : '#cfe3f5';
+        return '<span style="display:inline-block;margin-right:4px;padding:1px 6px;'+
+          'border-radius:4px;background:'+fl+';color:'+txt+'">T'+c.tier+
+          ' '+c.owned+'/'+c.total+'</span>';
+      }).join('') + '</div>').join('') + '</div>');
+  }
+  // 最近获得的蓝图
+  const rc = r.recent || [];
+  if (rc.length){
+    out.push('<div class="item"><b>🆕 最近获得</b>' + rc.map(b =>
+      '<div class="sub"><span style="color:'+(RARITY_COLOR[b.rarity]||'#888')+'">'+
+      '●</span> '+esc(b.name)+'　T'+(b.tier||'?')+
+      (b.cls?('　'+esc(b.cls)):'')+'</div>').join('') + '</div>');
+  }
+  const rr = r.rarity || {};
+  const rl = Object.entries(rr).map(([k,v]) =>
+    '<span style="color:'+(RARITY_COLOR[k]||'#888')+'">'+esc(v.name||k)+
+    ' '+v.weight+'%</span>').join('　');
+  if (rl) out.push('<div class="item"><b>🎲 出货权重</b><div class="sub">'+rl+'</div></div>');
+  box.innerHTML = out.join('');
+}
+
+/* ---------- 控制台 ---------- */
+function say(text, cls='bot'){
+  const div = document.createElement('div');
+  div.className = 'line ' + cls; div.textContent = text;
+  $('console').appendChild(div); $('console').scrollTop = $('console').scrollHeight;
+}
+const QUICK = ['我','资源','岛','队列','排行','帮助','研究 驱逐舰 T3','设计','设计列表','船坞','舰队','海图','战报'];
+function renderQuick(){
+  if ($('quick').children.length) return;
+  QUICK.forEach(c => { const b=document.createElement('button'); b.textContent=c; b.onclick=()=>send(c); $('quick').appendChild(b); });
+}
+async function send(text){
+  text = (text||'').trim(); if (!text || needSet) return;
+  say(text,'me'); $('cmd').value='';
+  try {
+    const d = await api('/api/cmd', {method:'POST', body: JSON.stringify({text})});
+    (d.replies||[]).forEach(r => say(r,'bot'));
+    if (d.player) renderPlayer(d.player);
+    if (curTab==='map') loadMap();
+  } catch(e){ say(e.message,'err'); if (e.status===403){ needSet=true; show('setup'); } }
+}
+async function pollEvents(){
   if (!TOKEN) return;
   try {
     const d = await api('/api/events');
-    (d.events || []).forEach(ev => say(ev.text, 'bot'));
-    if ((d.events || []).length) {
-      const me = await api('/api/me');
-      renderPlayer(me.player);
-    }
-  } catch (e) { /* 轮询失败静默 */ }
+    (d.events||[]).forEach(ev => say(ev.text,'bot'));
+    if ((d.events||[]).length){ const me = await api('/api/me'); renderPlayer(me.player); loadMap(); }
+  } catch(e){}
 }
 
-async function send(text) {
-  text = (text || '').trim();
-  if (!text) return;
-  if (needSet) return;
-  say(text, 'me');
-  $('cmd').value = '';
-  try {
-    const d = await api('/api/cmd', {method:'POST', body: JSON.stringify({text})});
-    (d.replies || []).forEach(r => say(r, 'bot'));
-    if (d.player) renderPlayer(d.player);
-  } catch (e) {
-    say(e.message, 'err');
-    if (e.status === 403) { needSet = true; show('setup'); }
-  }
-}
-
-/* ---- 事件绑定 ---- */
+/* ---------- 事件 ---------- */
 $('btnLogin').onclick = async () => {
-  const qq = $('qq').value.trim(), pw = $('pw').value;
-  $('loginMsg').textContent = '';
-  if (!qq) { $('loginMsg').className = 'msg err'; $('loginMsg').textContent = '请输入 QQ 号'; return; }
-  $('btnLogin').disabled = true;
+  const qq=$('qq').value.trim(), pw=$('pw').value, m=$('loginMsg');
+  m.textContent=''; m.className='msg err';
+  if(!qq){ m.textContent='请输入 QQ 号'; return; }
+  $('btnLogin').disabled=true;
   try {
-    const d = await api('/api/login', {method:'POST', body: JSON.stringify({qq, password: pw})});
-    TOKEN = d.token; localStorage.setItem('nw_token', TOKEN);
-    if (d.need_set_password) { needSet = true; show('setup'); }
-    else { needSet = false; const me = await api('/api/me'); enterGame(me); }
-  } catch (e) {
-    $('loginMsg').className = 'msg err'; $('loginMsg').textContent = e.message;
-  } finally { $('btnLogin').disabled = false; }
+    const d = await api('/api/login',{method:'POST',body:JSON.stringify({qq,password:pw})});
+    TOKEN=d.token; localStorage.setItem('nw_token',TOKEN);
+    if (d.need_set_password){ needSet=true; show('setup'); }
+    else { needSet=false; enterGame(await api('/api/me')); }
+  } catch(e){ m.textContent=e.message; } finally { $('btnLogin').disabled=false; }
 };
-
-$('pw').addEventListener('keydown', e => { if (e.key === 'Enter') $('btnLogin').click(); });
-
+$('pw').addEventListener('keydown', e => { if(e.key==='Enter') $('btnLogin').click(); });
 $('btnSet').onclick = async () => {
-  const a = $('npw').value, b = $('npw2').value;
-  const m = $('setupMsg'); m.className = 'msg err'; m.textContent = '';
-  if (a !== b) { m.textContent = '两次输入不一致'; return; }
+  const a=$('npw').value,b=$('npw2').value,m=$('setupMsg'); m.className='msg err'; m.textContent='';
+  if(a!==b){ m.textContent='两次输入不一致'; return; }
   try {
-    const d = await api('/api/password', {method:'POST', body: JSON.stringify({new_password: a})});
-    TOKEN = d.token; localStorage.setItem('nw_token', TOKEN);
-    needSet = false;
-    m.className = 'msg ok'; m.textContent = '口令已设置';
-    const me = await api('/api/me'); enterGame(me);
-  } catch (e) { m.textContent = e.message; }
+    const d = await api('/api/password',{method:'POST',body:JSON.stringify({new_password:a})});
+    TOKEN=d.token; localStorage.setItem('nw_token',TOKEN); needSet=false;
+    m.className='msg ok'; m.textContent='口令已设置';
+    enterGame(await api('/api/me'));
+  } catch(e){ m.textContent=e.message; }
 };
-
+async function doLogout(){
+  try { await api('/api/logout',{method:'POST'}); } catch(e){}
+  TOKEN=''; localStorage.removeItem('nw_token');
+  if(polling){ clearInterval(polling); polling=null; } location.reload();
+}
 $('btnQuit').onclick = doLogout;
 $('btnLogout').onclick = doLogout;
-async function doLogout() {
-  try { await api('/api/logout', {method:'POST'}); } catch (e) {}
-  TOKEN = ''; localStorage.removeItem('nw_token');
-  if (polling) { clearInterval(polling); polling = null; }
-  location.reload();
-}
-
 $('btnSend').onclick = () => send($('cmd').value);
-$('cmd').addEventListener('keydown', e => { if (e.key === 'Enter') send($('cmd').value); });
+$('cmd').addEventListener('keydown', e => { if(e.key==='Enter') send($('cmd').value); });
+$('btnRefreshMap').onclick = () => loadMap();
+$('btnMapReset').onclick = () => resetMapCenter();
+$('radius').oninput = () => { radius = +$('radius').value; $('radiusVal').textContent = radius; loadMap(); };
+$('cv').addEventListener('click', ev => {
+  if (!mapData) return;
+  const cv = $('cv'), r = cv.getBoundingClientRect();
+  const N = Math.max(mapData.w, mapData.h), cell = cv.width / N;
+  const gx = mapData.x0 + Math.floor((ev.clientX - r.left) / r.width  * cv.width  / cell);
+  const gy = mapData.y0 + Math.floor((ev.clientY - r.top ) / r.height * cv.height / cell);
+  const hit = (mapData.fleets||[]).find(f=>f.x===gx&&f.y===gy)
+           || (mapData.pirates||[]).find(p=>p.x===gx&&p.y===gy);
+  const tip = $('tip');
+  tip.textContent = hit ? ((hit.name||'目标') + ' ('+gx+','+gy+')') : ('('+gx+','+gy+') 空海域');
+  tip.style.display='block';
+  tip.style.left = Math.min(ev.clientX - r.left + 10, r.width - 130) + 'px';
+  tip.style.top  = (ev.clientY - r.top + 10) + 'px';
+  setTimeout(()=>{ tip.style.display='none'; }, 2200);
+});
 
+renderQuick();
 boot();
 </script>
 </body>
