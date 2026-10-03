@@ -454,6 +454,36 @@ class NavalWeb:
                     "options": _gov.design_options(
                         self.conn, self.cfg, qq, str(payload.get("cls", "")))}
 
+        @app.get("/api/sandbox")
+        async def sandbox_status(request: Request):
+            qq = self._qq_from_request(request)
+            if not qq:
+                return err("未登录", 401)
+            from . import sandbox as _sb
+
+            st = _sb.status(self.conn, self.cfg, qq)
+            if not st.get("ok"):
+                return err(st.get("reason", "查询失败"), 404)
+            return st
+
+        @app.post("/api/sandbox")
+        async def sandbox_apply(request: Request, payload: dict = Body(...)):
+            qq = self._qq_from_request(request)
+            if not qq:
+                return err("未登录", 401)
+            from . import sandbox as _sb
+
+            what = str(payload.get("what", "all"))
+            try:
+                ok, text = _sb.apply(self.conn, self.cfg, qq, what)
+            except Exception as e:
+                logger.exception("[海战模拟器][Web] 沙盒操作异常")
+                return err(f"沙盒操作失败：{type(e).__name__}", 500)
+            if not ok:
+                return err(text.lstrip("❌ "), 403)
+            return {"ok": True, "text": text,
+                    "status": _sb.status(self.conn, self.cfg, qq)}
+
         # ---------- 图形化数据 ----------
         @app.get("/api/map")
         async def map_data(request: Request, radius: int = 10,

@@ -84,6 +84,7 @@ COMMANDS = {
     # —— P2b §6.2：外交扩展 ——
     "贸易": ("trade_cmd", True, [], "贸易 [挂单|市场|接受|拒绝|撤单] ...（§6.2 资源贸易与市场）"),
     "加急": ("rush_cmd", True, ["加速", "催工"], "加急：花额外资源立即完成已排队的建造/生产/研究"),
+    "沙盒": ("sandbox_cmd", True, ["gm", "上帝"], "沙盒（仅服主）：全部/解锁/资源/建筑/状态"),
     "租港": ("lease_cmd", True, [], "租港 <盟友> <坐标>（§6.2 军港租借）"),
     "间谍": ("spy_cmd", True, [], "间谍 <玩家> <行动>（§6.2 破坏/窃取/煽动）"),
     "索赔": ("reparations_cmd", True, [], "索赔 <玩家> <金额> [坐标...]（§6.2 赔款割岛）"),
@@ -557,6 +558,37 @@ class GameCommands:
                 return "❌ 编号应为数字"
         ok, text = _gov.rush_queue(self.conn, self.cfg, ctx.qq, kind, qid)
         return text
+
+    async def sandbox_cmd(self, ctx: Ctx) -> str:
+        """沙盒/GM：仅 config.sandbox.qqs 白名单内的账号可用。"""
+        from . import sandbox as _sb
+        if not self._player(ctx.qq):
+            return "❌ 先 /nw注册"
+        if not _sb.is_gm(self.cfg, ctx.qq):
+            return _sb.require_gm(self.cfg, ctx.qq)[1]
+        sub = ctx.args[0].lower() if ctx.args else ""
+        mapping = {"全部": "all", "all": "all", "解锁": "unlock", "unlock": "unlock",
+                   "资源": "res", "res": "res", "建筑": "buildings",
+                   "buildings": "buildings"}
+        if sub in mapping:
+            ok, text = _sb.apply(self.conn, self.cfg, ctx.qq, mapping[sub])
+            return text
+        st = _sb.status(self.conn, self.cfg, ctx.qq)
+        if not st.get("ok"):
+            return "❌ 查询失败"
+        res = st["resources"]
+        return (f"🛠 沙盒状态（{st['name']}）\n"
+                f"　蓝图 {st['blueprints_owned']}/{st['blueprints_total']}"
+                f"　岛 {st['islands']}　建筑 {st['buildings']}"
+                f"　设计 {st['designs']}　舰船 {st['ships']}\n"
+                f"　资源 钢{res['steel']:.0f} 油{res['oil']:.0f}"
+                f" 铝{res['aluminium']:.0f} 稀土{res['rare_earth']:.0f}"
+                f" 芯片{res['chips']:.0f}\n"
+                f"　食物{res['food']:.0f} 补给{res['supply']:.0f}"
+                f" 人力{res['manpower']:.0f} 资金{res['money']:.0f}"
+                f" 科研{res['science']:.0f} 情报{res['intel']:.0f}\n"
+                f"可用：/nw沙盒 全部　或　解锁 / 资源 / 建筑\n"
+                f"（「全部」= 解锁全部蓝图 + 资源拉满 + 建筑与岛级满级）")
 
     async def queue(self, ctx: Ctx) -> str:
         p = self._player(ctx.qq)
