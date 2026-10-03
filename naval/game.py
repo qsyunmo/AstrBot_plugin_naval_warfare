@@ -1081,7 +1081,13 @@ class GameCommands:
         missing = _missing_res(p, cost)
         if missing:
             return "❌ 资源不足：缺 " + "、".join(missing)
-        work = d["work_ticks"] * qty
+        # 批量折扣：船台是并排建造的，100 艘不该要 100 倍工时。
+        # 工时 = 单舰工时 × 数量^batch_exponent（默认 0.5 = 平方根）
+        pcfg = self.cfg.get("production") or {}
+        b_exp = float(pcfg.get("batch_exponent", 0.5))
+        b_min = int(pcfg.get("batch_min_ticks", 1))
+        unit_work = int(d["work_ticks"] or 1)
+        work = max(b_min, int(round(unit_work * (qty ** b_exp))))
         econ_tick = meta_get(self.conn, "econ_tick", int, 0)
         self.confirm.put(ctx.origin, ctx.qq,
                          {"type": "produce", "design_id": d["id"], "qty": qty,
@@ -1094,8 +1100,10 @@ class GameCommands:
             extra = "、".join(f"{RES_NAME[k]}{rc[k] - cost[k]}"
                               for k in cost if rc.get(k, 0) > cost[k]) or "无"
             hint += f"　3 ⚡加急（多付 {extra}，立即下水）"
+        per = f"（单舰 {unit_work} tick，批量 ×{qty} 只加 {work} tick）" if qty > 1 else ""
         return (f"🚢 准备在 ({x},{y}) 船坞建造【{d['name']}】×{qty}\n"
-                f"消耗：{_cost_text(cost)}\n工时 {work} tick（约 {_gov.fmt_mins(mins)}）"
+                f"消耗：{_cost_text(cost)}\n"
+                f"工时 {work} tick（约 {_gov.fmt_mins(mins)}）{per}"
                 f"{hint}")
 
     async def shipyard(self, ctx: Ctx) -> str:
@@ -1165,10 +1173,24 @@ class GameCommands:
             if not ships:
                 return head + "\n（空编队）/nw编队 " + f["name"] + " 加入 <舰名…>"
             lines = [head, f"编队航速 {fleetm.fleet_speed(self.conn, f['id'])}节，编制："]
+            # 同蓝图舰船折叠：批量生产后一次几十上百艘，逐艘列会把消息撑爆
+            groups = {}
             for s in ships:
-                st = fleetm.ship_stats(s)
-                lines.append(f"· {s['name']} T{s['tier']} 耐久{s['hp']:.0f}/{s['max_hp']:.0f}"
-                             f"　{pools.stats_text(st)}")
+                groups.setdefault((s["name"], s["tier"]), []).append(s)
+            for (nm, tier), g in groups.items():
+                if len(g) == 1:
+                    s = g[0]
+                    st = fleetm.ship_stats(s)
+                    lines.append(f"· {s['name']} T{s['tier']} "
+                                 f"耐久{s['hp']:.0f}/{s['max_hp']:.0f}"
+                                 f"　{pools.stats_text(st)}")
+                else:
+                    hp = sum(float(x["hp"] or 0) for x in g)
+                    mx = sum(float(x["max_hp"] or 0) for x in g)
+                    lines.append(f"· {nm} T{tier} ×{len(g)}"
+                                 f"　合计耐久 {hp:.0f}/{mx:.0f}")
+            if len(groups) < len(ships):
+                lines.append(f"（{len(ships)} 艘已按同型折叠为 {len(groups)} 行）")
             return "\n".join(lines)
         tick = meta_get(self.conn, "war_tick", int, 0)
         row, err = fleetm.create_fleet(self.conn, ctx.qq, name,

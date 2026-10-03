@@ -1096,13 +1096,50 @@ function renderDiplo(d){
     switchTab('cmd'); $('cmd').value = '贸易接受 ' + b.dataset.trade; $('cmd').focus();
   });
 }
+/* 同蓝图舰船折叠：多艘同名同代同舰种的合成一条，点开才展开逐艘明细。
+   批量生产后一次会有几十上百艘，全平铺会刷屏。 */
+const SHIP_FOLD_MIN = 3;     // ≥3 艘同名才折叠，1~2 艘直接平铺
+const SHIP_FOLD_MAX = 40;    // 展开时最多列 40 条，其余只报数量
+function shipGroups(ships){
+  const m = new Map();
+  (ships || []).forEach(s => {
+    const k = (s.name||'') + '|' + (s.tier||'') + '|' + (s.cls||'');
+    if (!m.has(k)) m.set(k, []);
+    m.get(k).push(s);
+  });
+  return [...m.values()];
+}
+function shipGroupHtml(group){
+  if (!group || !group.length) return '';
+  if (group.length < SHIP_FOLD_MIN) return group.map(shipLine).join('');
+  const s0 = group[0];
+  const icon = (s0.cls && String(s0.cls).startsWith('ss')) ? '🦈 ' : '⚓ ';
+  const inPort = group.filter(s => !s.fleet_id).length;
+  const hpSum = group.reduce((a, s) => a + (s.hp || 0), 0);
+  const hpMax = group.reduce((a, s) => a + (s.max_hp || 0), 0);
+  const shown = group.slice(0, SHIP_FOLD_MAX).map(shipLine).join('');
+  const more = group.length > SHIP_FOLD_MAX
+    ? '<div class="sub">…还有 ' + (group.length - SHIP_FOLD_MAX) + ' 艘未列出</div>' : '';
+  const state = (inPort === group.length) ? '　（全在港）'
+    : (inPort ? '　（' + inPort + ' 艘在港）' : '');
+  return '<details style="margin:2px 0"><summary style="cursor:pointer">'
+    + icon + esc(s0.name) + ' T' + s0.tier
+    + '　<b>×' + group.length + '</b>'
+    + (hpMax ? '　HP ' + fmt(hpSum) + '/' + fmt(hpMax) : '')
+    + state + '　<span style="opacity:.6;font-size:11px">展开</span>'
+    + '</summary>' + shown + more + '</details>';
+}
+function shipsFoldHtml(ships){
+  return shipGroups(ships).map(shipGroupHtml).join('');
+}
+
 function renderFleets(d){
   const box = $('fleetList');
   if (!d.fleets || !d.fleets.length) { box.innerHTML = '<div class="empty">还没有舰队。造好船后用指令创建：<code>舰队 &lt;名字&gt;</code></div>'; return; }
   box.innerHTML = d.fleets.map(f => {
     const m = f.mission || {};
     const mv = m.type ? '　任务：'+esc(m.type)+(m.target_x!=null?(' → ('+m.target_x+','+m.target_y+')'):'') : '';
-    const ships = (f.ships||[]).map(shipLine).join('');
+    const ships = shipsFoldHtml(f.ships || []);
     return '<div class="item"><b>⛵ '+esc(f.name)+'</b>　('+f.x+','+f.y+')'+
            (f.speed?('　航速 '+f.speed):'')+mv+
            '<div class="sub">'+((f.ships||[]).length)+' 艘</div>'+ships+'</div>';
@@ -1118,8 +1155,9 @@ function renderAssets(d){
     ((d.designs||[]).length ? (d.designs||[]).map(x =>
       '<div class="sub">'+esc(x.name)+'　'+esc(x.ship_class)+' T'+x.tier+'</div>').join('')
       : '<div class="sub">暂无，用 <code>设计</code> 进入设计模式</div>') + '</div>');
-  out.push('<div class="item"><b>🚢 舰船</b>' +
-    ((d.ships||[]).length ? (d.ships||[]).map(shipLine).join('')
+  out.push('<div class="item"><b>🚢 舰船</b>'
+    + ((d.ships||[]).length ? '　共 '+d.ships.length+' 艘（同型已折叠，点开看逐艘）' : '')
+    + ((d.ships||[]).length ? shipsFoldHtml(d.ships)
       : '<div class="sub">暂无</div>') + '</div>');
   // §19.1 指挥官/舰长
   const caps = d.captains || [];

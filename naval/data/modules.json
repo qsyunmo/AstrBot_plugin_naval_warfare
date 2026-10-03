@@ -105,7 +105,7 @@
   9
  ],
  "work_divisor": 10,
- "max_produce_qty": 10,
+ "max_produce_qty": 100,
  "slot_names": {
   "hull": "船体",
   "engine": "动力",
