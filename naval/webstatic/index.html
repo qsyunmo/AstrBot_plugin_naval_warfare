@@ -645,6 +645,24 @@ async function doRush(kind, id){
 /* ---------- 图形化编队 ---------- */
 let fleetData = null;
 let fleetDraft = {};      // {fleet_id: [{name, qty}, ...]} 编辑中的编成草稿
+
+/* 当前港区（含其它舰队在编）里可选的舰名，按「港区多的在前」排序 */
+function _nameChoices(){
+  const d = fleetData || { fleets: [], port: [] };
+  const seen = new Map();
+  (d.port || []).forEach(p => { if (!seen.has(p.name)) seen.set(p.name, p.count); });
+  (d.fleets || []).forEach(f => (f.comp || []).forEach(c => {
+    if (!seen.has(c.name)) seen.set(c.name, 0);
+  }));
+  return [...seen.entries()].map(([name, count]) => ({name, count}));
+}
+/* 给新行挑一个「还没被本队其它行占用」的舰名，避免默认选到已用过的 */
+function _nextFreeName(fid){
+  const used = new Set((fleetDraft[fid] || []).map(r => r.name).filter(Boolean));
+  const all = _nameChoices();
+  const free = all.find(c => !used.has(c.name));
+  return (free || all[0] || {name: ''}).name;
+}
 async function loadFleetComposer(){
   const box = $('fleetComposer');
   if (!box) return;
@@ -652,20 +670,24 @@ async function loadFleetComposer(){
   try {
     const d = await api('/api/fleets');
     fleetData = d;
-    // 已有草稿保留，新舰队用当前编成初始化
-    d.fleets.forEach(f => {
-      if (!fleetDraft[f.id]){
-        fleetDraft[f.id] = (f.comp||[]).map(c => ({name:c.name, qty:c.count}));
-      }
-    });
-    // 清掉已解散舰队的草稿
-    Object.keys(fleetDraft).forEach(k => {
-      if (!d.fleets.some(f => String(f.id) === String(k))) delete fleetDraft[k];
-    });
+    _syncDraftFromData(d);
     renderFleetComposer();
   } catch(e){
     box.innerHTML = '<div class="empty">编队面板加载失败：'+esc(e.message)+'</div>';
   }
+}
+/* 用服务端数据补齐缺失的草稿（新舰队 / 保存后 / 解散后都要用）*/
+function _syncDraftFromData(d){
+  (d.fleets || []).forEach(f => {
+    if (!fleetDraft[f.id]){
+      const rows = (f.comp||[]).map(c => ({name:c.name, qty:c.count}));
+      // 空舰队也先给一行，否则面板一片空白、点保存也没东西可存
+      fleetDraft[f.id] = rows.length ? rows : [{name:'', qty:1}];
+    }
+  });
+  Object.keys(fleetDraft).forEach(k => {
+    if (!(d.fleets||[]).some(f => String(f.id) === String(k))) delete fleetDraft[k];
+  });
 }
 function _shipOptions(sel, port){
   // 「请选择港区内舰船」下拉：港区可用 + 本队已有（免得换手时选不到）
@@ -702,6 +724,10 @@ function renderFleetComposer(){
       + '先「＋ 创建舰队」，再用下面的行挑选舰船组成编队。</div></div>');
   }
   (d.fleets||[]).forEach(f => {
+    // 补空行默认值：保证「下拉框显示什么，草稿里就是什么」
+    (fleetDraft[f.id] || []).forEach(r => {
+      if (!r.name) r.name = _nextFreeName(f.id);
+    });
     const rows = (fleetDraft[f.id] || []);
     const body = rows.length ? rows.map((r, i) =>
       '<div class="sub" style="display:flex;gap:6px;align-items:center;margin:3px 0">'
@@ -745,7 +771,11 @@ function renderFleetComposer(){
     const fid = +b.dataset.fid, act = b.dataset.act;
     b.onclick = () => {
       if (act === 'add'){
-        (fleetDraft[fid] = fleetDraft[fid] || []).push({name:'', qty:1});
+        // 默认就用第一个还没占用的舰名 —— 不能留空：
+        // 留空的话下拉框会「显示」某艘船，但草稿里 name 仍是空串，
+        // 保存时被 filter(r => r.name) 滤掉，看起来就是「点了没反应」。
+        (fleetDraft[fid] = fleetDraft[fid] || [])
+          .push({name: _nextFreeName(fid), qty: 1});
         renderFleetComposer();
       } else if (act === 'del'){
         fleetDraft[fid].splice(+b.dataset.ri, 1);
@@ -800,12 +830,20 @@ async function saveFleet(fid){
   const want = (fleetDraft[fid] || [])
     .filter(r => r.name && r.qty > 0)
     .map(r => ({name: r.name, qty: r.qty}));
+  const cur = (fleetData.fleets || []).find(f => String(f.id) === String(fid));
+  // 草稿里一艘都没有、但舰队现在有船 → 这是在清空编队，必须二次确认
+  if (!want.length && cur && cur.total > 0){
+    if (!confirm('当前没有任何行，保存会把【' + cur.name + '】的 '
+        + cur.total + ' 艘船全部退回港区。确定清空吗？')) return;
+  }
   try {
     const d = await api('/api/fleet_compose', {method:'POST',
       body: JSON.stringify({fleet_id: fid, want: want})});
     say(d.text || '已保存', 'ok');
     fleetData = d.data;
+    // 先按新编成重建草稿再渲染：直接 delete 会让卡片变空，看起来像没保存上
     delete fleetDraft[fid];
+    _syncDraftFromData(d.data);
     renderFleetComposer();
     loadAssets();
   } catch(e){ say('保存编成失败：'+e.message, 'err'); }
