@@ -224,3 +224,131 @@ def latest_origin(conn, qq: str):
         if r and r["origin"]:
             return r["origin"]
     return None
+
+
+# ------------------------------------------------ 图形化编队（Web 用）
+def _cls_of(conn, qq: str, design_name: str, cache: dict):
+    """舰名 → (舰种代号, 代际)。ships.def_id 存的是 designs.id，而编队是按舰名分组的。"""
+    key = (qq, design_name)
+    if key in cache:
+        return cache[key]
+    r = conn.execute("SELECT ship_class,tier FROM designs WHERE qq=? AND name=?",
+                     (qq, design_name)).fetchone()
+    cache[key] = (r["ship_class"] if r else "", r["tier"] if r else 1)
+    return cache[key]
+
+
+def port_ships(conn, qq: str) -> list:
+    """港区（未编入任何舰队）的舰船，按舰名分组。"""
+    rows = conn.execute(
+        "SELECT name, COUNT(*) c FROM ships WHERE qq=? AND fleet_id IS NULL"
+        " GROUP BY name ORDER BY name", (qq,)).fetchall()
+    cache = {}
+    out = []
+    for r in rows:
+        cls, tier = _cls_of(conn, qq, r["name"], cache)
+        out.append({"name": r["name"], "count": r["c"],
+                    "cls": cls, "tier": tier})
+    return out
+
+
+def overview(conn, qq: str) -> dict:
+    """舰队总览：每支舰队的编成（按舰名分组）+ 港区可用舰船。"""
+    cache = {}
+    fleets = []
+    for f in list_fleets(conn, qq):
+        comp = []
+        for r in conn.execute(
+                "SELECT name, COUNT(*) c FROM ships WHERE qq=? AND fleet_id=?"
+                " GROUP BY name ORDER BY name", (qq, f["id"])).fetchall():
+            cls, tier = _cls_of(conn, qq, r["name"], cache)
+            comp.append({"name": r["name"], "count": r["c"],
+                         "cls": cls, "tier": tier})
+        fleets.append({
+            "id": f["id"], "name": f["name"], "x": f["x"], "y": f["y"],
+            "in_battle": bool(in_battle(conn, f["id"])),
+            "total": ship_count(conn, f["id"]),
+            "speed": fleet_speed(conn, f["id"]),
+            "subs_only": is_subs_only(conn, f["id"]),
+            "comp": comp,
+        })
+    return {"ok": True, "fleets": fleets, "port": port_ships(conn, qq)}
+
+
+def get_fleet_by_id(conn, qq: str, fid: int):
+    return conn.execute("SELECT * FROM fleets WHERE id=? AND qq=?",
+                        (fid, qq)).fetchone()
+
+
+def set_composition(conn, qq: str, fleet_id: int, want: list):
+    """把舰队编成设为目标（多退少补）。
+
+    want: [{"name": 舰名, "qty": 数量}]。已在队里的优先留用，
+    不足的从港区（fleet_id IS NULL）补，多余的退回港区。
+    返回 (ok, text)。
+    """
+    f = get_fleet_by_id(conn, qq, fleet_id)
+    if not f:
+        return False, "找不到该舰队"
+    if in_battle(conn, fleet_id):
+        return False, "舰队正在交战，不能调编（可先 /nw撤退）"
+
+    cur = {}
+    for r in conn.execute("SELECT id,name FROM ships WHERE qq=? AND fleet_id=?",
+                          (qq, fleet_id)).fetchall():
+        cur.setdefault(r["name"], []).append(r["id"])
+
+    target = {}
+    for w in (want or []):
+        nm = str((w or {}).get("name", "")).strip()
+        try:
+            q = int((w or {}).get("qty") or 0)
+        except (TypeError, ValueError):
+            continue
+        if not nm or q <= 0:
+            continue
+        target[nm] = target.get(nm, 0) + q
+
+    moved_out = moved_in = 0
+    # 多余的退回港区
+    for nm, ids in cur.items():
+        keep = min(len(ids), target.get(nm, 0))
+        for sid in ids[keep:]:
+            conn.execute("UPDATE ships SET fleet_id=NULL WHERE id=?", (sid,))
+            moved_out += 1
+    # 不足的从港区补
+    short = {}
+    for nm, q in target.items():
+        have = min(len(cur.get(nm, [])), q)
+        if q - have > 0:
+            short[nm] = q - have
+    for nm, need in short.items():
+        rows = conn.execute(
+            "SELECT id FROM ships WHERE qq=? AND name=? AND fleet_id IS NULL"
+            " LIMIT ?", (qq, nm, need)).fetchall()
+        for r in rows:
+            conn.execute("UPDATE ships SET fleet_id=? WHERE id=?",
+                         (fleet_id, r["id"]))
+            moved_in += 1
+        if len(rows) < need:
+            # 港区不够，不计失败：把能编的先编上，提示差额
+            pass
+    conn.commit()
+    total = ship_count(conn, fleet_id)
+    return True, (f"✅【{f['name']}】编成已更新：入队 {moved_in} 艘、"
+                  f"移出 {moved_out} 艘，现有 {total} 艘")
+
+
+def disband(conn, qq: str, fleet_id: int):
+    """解散舰队：舰船全部退回港区，删除舰队记录。"""
+    f = get_fleet_by_id(conn, qq, fleet_id)
+    if not f:
+        return False, "找不到该舰队"
+    if in_battle(conn, fleet_id):
+        return False, "舰队正在交战，不能解散"
+    n = ship_count(conn, fleet_id)
+    conn.execute("UPDATE ships SET fleet_id=NULL WHERE qq=? AND fleet_id=?",
+                 (qq, fleet_id))
+    conn.execute("DELETE FROM fleets WHERE id=? AND qq=?", (fleet_id, qq))
+    conn.commit()
+    return True, f"🗑 已解散【{f['name']}】，{n} 艘舰船退回港区"

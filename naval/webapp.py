@@ -518,6 +518,75 @@ class NavalWeb:
             return {"ok": True, "text": text,
                     "status": _cap.status(self.conn, self.cfg, qq)}
 
+        # ---------- 图形化编队 ----------
+        @app.get("/api/fleets")
+        async def fleets(request: Request):
+            qq = self._qq_from_request(request)
+            if not qq:
+                return err("未登录", 401)
+            from . import fleet as _fm
+
+            return _fm.overview(self.conn, qq)
+
+        @app.post("/api/fleet_create")
+        async def fleet_create(request: Request, payload: dict = Body(...)):
+            qq = self._qq_from_request(request)
+            if not qq:
+                return err("未登录", 401)
+            from . import fleet as _fm
+            from .db import meta_get as _mg
+
+            p = self._player(qq)
+            if not p or p["capital_x"] is None:
+                return err("尚未注册势力")
+            name = str(payload.get("name", "")).strip()[:8]
+            f, msg = _fm.create_fleet(self.conn, qq, name, p["capital_x"],
+                                      p["capital_y"],
+                                      _mg(self.conn, "econ_tick", int, 0))
+            if not f:
+                return err(msg)
+            return {"ok": True, "text": f"✅ 舰队【{f['name']}】已在首都港组建",
+                    "data": _fm.overview(self.conn, qq)}
+
+        @app.post("/api/fleet_compose")
+        async def fleet_compose(request: Request, payload: dict = Body(...)):
+            qq = self._qq_from_request(request)
+            if not qq:
+                return err("未登录", 401)
+            from . import fleet as _fm
+
+            try:
+                fid = int(payload.get("fleet_id"))
+            except (TypeError, ValueError):
+                return err("fleet_id 应为数字")
+            try:
+                ok, text = _fm.set_composition(self.conn, qq, fid,
+                                               payload.get("want") or [])
+            except Exception as e:
+                logger.exception("[海战模拟器][Web] 编队异常")
+                return err(f"编队失败：{type(e).__name__}", 500)
+            if not ok:
+                return err(text)
+            return {"ok": True, "text": text,
+                    "data": _fm.overview(self.conn, qq)}
+
+        @app.post("/api/fleet_disband")
+        async def fleet_disband(request: Request, payload: dict = Body(...)):
+            qq = self._qq_from_request(request)
+            if not qq:
+                return err("未登录", 401)
+            from . import fleet as _fm
+
+            try:
+                fid = int(payload.get("fleet_id"))
+            except (TypeError, ValueError):
+                return err("fleet_id 应为数字")
+            ok, text = _fm.disband(self.conn, qq, fid)
+            if not ok:
+                return err(text)
+            return {"ok": True, "text": text,
+                    "data": _fm.overview(self.conn, qq)}
+
         # ---------- 图形化数据 ----------
         @app.get("/api/map")
         async def map_data(request: Request, radius: int = 10,

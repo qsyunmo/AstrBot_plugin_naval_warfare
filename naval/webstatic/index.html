@@ -163,6 +163,7 @@
     </div>
 
     <div class="pane" id="pane-fleet">
+      <div class="list" id="fleetComposer"></div>
       <div class="list" id="fleetList"></div>
     </div>
 
@@ -283,6 +284,7 @@ function switchTab(k){
   if (k === 'map') loadMap();
   if (k === 'build') loadBuild();
   if (k === 'design') loadDesign();
+  if (k === 'fleet') loadFleetComposer();
   if (k === 'tech') loadResearchOptions();
   if (k === 'fleet' || k === 'assets' || k === 'diplo' || k === 'tech') loadAssets();
   if (k === 'battle') loadBattles();
@@ -638,6 +640,186 @@ async function doRush(kind, id){
     say(d.text || '已加急', 'ok');
     loadBuild(); loadAssets();
   } catch(e){ say('加急失败：'+e.message, 'err'); }
+}
+
+/* ---------- 图形化编队 ---------- */
+let fleetData = null;
+let fleetDraft = {};      // {fleet_id: [{name, qty}, ...]} 编辑中的编成草稿
+async function loadFleetComposer(){
+  const box = $('fleetComposer');
+  if (!box) return;
+  box.innerHTML = '<div class="empty">载入中…</div>';
+  try {
+    const d = await api('/api/fleets');
+    fleetData = d;
+    // 已有草稿保留，新舰队用当前编成初始化
+    d.fleets.forEach(f => {
+      if (!fleetDraft[f.id]){
+        fleetDraft[f.id] = (f.comp||[]).map(c => ({name:c.name, qty:c.count}));
+      }
+    });
+    // 清掉已解散舰队的草稿
+    Object.keys(fleetDraft).forEach(k => {
+      if (!d.fleets.some(f => String(f.id) === String(k))) delete fleetDraft[k];
+    });
+    renderFleetComposer();
+  } catch(e){
+    box.innerHTML = '<div class="empty">编队面板加载失败：'+esc(e.message)+'</div>';
+  }
+}
+function _shipOptions(sel, port){
+  // 「请选择港区内舰船」下拉：港区可用 + 本队已有（免得换手时选不到）
+  const opts = [];
+  const seen = new Set();
+  (port||[]).forEach(p => { seen.add(p.name);
+    opts.push('<option value="'+esc(p.name)+'"'+(p.name===sel?' selected':'')+'>'
+      + esc(p.name)+'（港区 '+p.count+'）</option>'); });
+  (fleetData.fleets||[]).forEach(f => (f.comp||[]).forEach(c => {
+    if (!seen.has(c.name)){ seen.add(c.name);
+      opts.push('<option value="'+esc(c.name)+'"'+(c.name===sel?' selected':'')+'>'
+        + esc(c.name)+'（在编 '+c.count+'）</option>'); }
+  }));
+  if (sel && !seen.has(sel)){
+    opts.unshift('<option value="'+esc(sel)+'" selected>'+esc(sel)+'</option>');
+  }
+  const head = opts.length ? '' :
+    '<option value="" selected>（港区没有可用舰船）</option>';
+  return head + opts.join('');
+}
+function renderFleetComposer(){
+  const box = $('fleetComposer');
+  const d = fleetData;
+  const out = [];
+  out.push('<div class="item"><b>⚓ 舰队总览</b>'
+    + '　共 '+(d.fleets||[]).length+' 支　港区可用 '
+    + ((d.port||[]).reduce((a,p)=>a+p.count,0))+' 艘'
+    + '　<button class="ghost" id="btnNewFleet">＋ 创建舰队</button>'
+    + '<div class="sub">选舰船与数量后点「保存编成」提交；点「添加船型」加一行。'
+    + '（数量超过港区可用量时只能编入现有的部分）</div></div>');
+
+  if (!(d.fleets||[]).length){
+    out.push('<div class="item"><div class="sub">还没有舰队。'
+      + '先「＋ 创建舰队」，再用下面的行挑选舰船组成编队。</div></div>');
+  }
+  (d.fleets||[]).forEach(f => {
+    const rows = (fleetDraft[f.id] || []);
+    const body = rows.length ? rows.map((r, i) =>
+      '<div class="sub" style="display:flex;gap:6px;align-items:center;margin:3px 0">'
+      + '<select data-fid="'+f.id+'" data-ri="'+i+'" class="fShip" '
+      + 'style="flex:1;padding:4px;border-radius:4px;border:1px solid #2a3d4d;'
+      + 'background:#0d1a24;color:#dfe9f3">'+_shipOptions(r.name, d.port)+'</select>'
+      + '<input type="number" min="0" value="'+(r.qty||0)+'" data-fid="'+f.id
+      + '" data-ri="'+i+'" class="fQty" style="width:64px;padding:4px;'
+      + 'border-radius:4px;border:1px solid #2a3d4d;background:#0d1a24;color:#dfe9f3">'
+      + '<button class="ghost" data-fid="'+f.id+'" data-ri="'+i+'" data-act="del">✕</button>'
+      + '</div>').join('')
+      : '<div class="sub" style="color:#7f97ad">（空编队，点下面「添加船型」开始）</div>';
+    const compTxt = (f.comp||[]).length
+      ? (f.comp||[]).map(c => esc(c.name)+'×'+c.count).join('　')
+      : '空';
+    out.push('<div class="item"><b>'+esc(f.name)+'</b>　('+f.x+','+f.y+')'
+      + '　在编 <b>'+f.total+'</b> 艘　航速 '+(f.speed||0)
+      + (f.subs_only ? '　<span style="color:#5fd0ff">潜艇队</span>' : '')
+      + (f.in_battle ? '　<span style="color:#f2555a">⚔ 交战中（不可调编）</span>' : '')
+      + '<div class="sub">当前：'+compTxt+'</div>'
+      + body
+      + '<div class="sub" style="margin-top:5px">'
+      + '<button class="ghost" data-fid="'+f.id+'" data-act="add">＋ 添加船型</button>　'
+      + '<button class="ghost" data-fid="'+f.id+'" data-act="save"'
+      + (f.in_battle ? ' disabled' : '')+'>💾 保存编成</button>　'
+      + '<button class="ghost" data-fid="'+f.id+'" data-act="disband"'
+      + (f.in_battle ? ' disabled' : '')+'>🗑 解散舰队</button>'
+      + '</div></div>');
+  });
+  if ((d.port||[]).length){
+    out.push('<div class="item"><b>🏭 港区可用舰船</b>'
+      + (d.port||[]).map(p => '<div class="sub">'+esc(p.name)
+        + '　'+esc(p.tier ? ('T'+p.tier) : '')+'　×'+p.count+'</div>').join('')
+      + '</div>');
+  }
+  box.innerHTML = out.join('');
+
+  const nb = $('btnNewFleet');
+  if (nb) nb.onclick = newFleetDialog;
+  box.querySelectorAll('button[data-act]').forEach(b => {
+    const fid = +b.dataset.fid, act = b.dataset.act;
+    b.onclick = () => {
+      if (act === 'add'){
+        (fleetDraft[fid] = fleetDraft[fid] || []).push({name:'', qty:1});
+        renderFleetComposer();
+      } else if (act === 'del'){
+        fleetDraft[fid].splice(+b.dataset.ri, 1);
+        renderFleetComposer();
+      } else if (act === 'save'){
+        saveFleet(fid);
+      } else if (act === 'disband'){
+        if (confirm('解散这支舰队？舰船会全部退回港区。')) disbandFleet(fid);
+      }
+    };
+  });
+  box.querySelectorAll('select.fShip').forEach(s => {
+    s.onchange = () => {
+      fleetDraft[+s.dataset.fid][+s.dataset.ri].name = s.value;
+      renderFleetComposer();
+    };
+  });
+  box.querySelectorAll('input.fQty').forEach(inp => {
+    inp.onchange = () => {
+      fleetDraft[+inp.dataset.fid][+inp.dataset.ri].qty = +inp.value || 0;
+    };
+  });
+}
+function newFleetDialog(){
+  const box = $('fleetComposer');
+  const bar = document.createElement('div');
+  bar.className = 'item';
+  bar.style.border = '1px solid #3fa9f5';
+  bar.innerHTML = '<b>新建舰队</b><div class="sub" style="margin-top:5px">'
+    + '<input id="nfName" placeholder="舰队名（最多8字）" maxlength="8" '
+    + 'style="padding:4px 8px;border-radius:4px;border:1px solid #2a3d4d;'
+    + 'background:#0d1a24;color:#dfe9f3;width:160px">　'
+    + '<button class="ghost" id="nfOk">确定</button>　'
+    + '<button class="ghost" id="nfCancel">取消</button></div>';
+  box.insertBefore(bar, box.firstChild);
+  const nm = $('nfName'); if (nm) nm.focus();
+  $('nfCancel').onclick = () => bar.remove();
+  $('nfOk').onclick = async () => {
+    const name = (nm.value || '').trim();
+    if (!name){ say('请填舰队名', 'err'); nm.focus(); return; }
+    try {
+      const d = await api('/api/fleet_create', {method:'POST',
+        body: JSON.stringify({name: name})});
+      say(d.text || '已创建', 'ok');
+      fleetData = d.data;
+      renderFleetComposer();
+    } catch(e){ say('创建失败：'+e.message, 'err'); }
+  };
+  nm.onkeydown = (ev) => { if (ev.key === 'Enter') $('nfOk').click(); };
+}
+async function saveFleet(fid){
+  const want = (fleetDraft[fid] || [])
+    .filter(r => r.name && r.qty > 0)
+    .map(r => ({name: r.name, qty: r.qty}));
+  try {
+    const d = await api('/api/fleet_compose', {method:'POST',
+      body: JSON.stringify({fleet_id: fid, want: want})});
+    say(d.text || '已保存', 'ok');
+    fleetData = d.data;
+    delete fleetDraft[fid];
+    renderFleetComposer();
+    loadAssets();
+  } catch(e){ say('保存编成失败：'+e.message, 'err'); }
+}
+async function disbandFleet(fid){
+  try {
+    const d = await api('/api/fleet_disband', {method:'POST',
+      body: JSON.stringify({fleet_id: fid})});
+    say(d.text || '已解散', 'ok');
+    fleetData = d.data;
+    delete fleetDraft[fid];
+    renderFleetComposer();
+    loadAssets();
+  } catch(e){ say('解散失败：'+e.message, 'err'); }
 }
 
 /* ---------- 海图 ---------- */
