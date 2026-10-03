@@ -158,6 +158,10 @@
       <div class="list" id="mapEntities"></div>
     </div>
 
+    <div class="pane" id="pane-design">
+      <div class="list" id="designList"></div>
+    </div>
+
     <div class="pane" id="pane-fleet">
       <div class="list" id="fleetList"></div>
     </div>
@@ -258,9 +262,9 @@ function renderPlayer(p){
 }
 
 /* ---------- 标签页 ---------- */
-const TABS = [['map','🗺 海图'],['build','🏗 建造'],['fleet','⚓ 舰队'],
-              ['assets','📦 势力'],['tech','🔬 科技'],['diplo','🕊 外交'],
-              ['battle','🎬 战报'],['cmd','💬 指令']];
+const TABS = [['map','🗺 海图'],['build','🏗 建造'],['design','📐 组装'],
+              ['fleet','⚓ 舰队'],['assets','📦 势力'],['tech','🔬 科技'],
+              ['diplo','🕊 外交'],['battle','🎬 战报'],['cmd','💬 指令']];
 let curTab = 'map';
 function buildTabs(){
   if ($('tabs').children.length) return;
@@ -278,9 +282,139 @@ function switchTab(k){
   TABS.forEach(([t]) => $('pane-'+t).classList.toggle('on', t === k));
   if (k === 'map') loadMap();
   if (k === 'build') loadBuild();
+  if (k === 'design') loadDesign();
   if (k === 'tech') loadResearchOptions();
   if (k === 'fleet' || k === 'assets' || k === 'diplo' || k === 'tech') loadAssets();
   if (k === 'battle') loadBattles();
+}
+
+/* ---------- 图形化组装（设计舰船） ---------- */
+let dsn = null;          // design_options 数据
+let dsnChosen = {};      // {slot: module_id}
+let dsnPreview = null;
+async function loadDesign(cls){
+  const box = $('designList');
+  box.innerHTML = '<div class="empty">载入中…</div>';
+  try {
+    const d = await api('/api/design_options' + (cls ? ('?cls=' + cls) : ''));
+    dsn = d;
+    // 默认每个槽位选「已拥有的第一个」（必选槽优先）
+    dsnChosen = {};
+    d.slots.forEach(s => {
+      const pick = s.options.find(o => o.owned);
+      if (pick) dsnChosen[s.key] = pick.id;
+    });
+    renderDesign();
+  } catch(e){
+    box.innerHTML = '<div class="empty">组装面板加载失败：'+esc(e.message)+'</div>';
+  }
+}
+function renderDesign(){
+  const box = $('designList');
+  const out = [];
+  // 舰种切换
+  out.push('<div class="item" style="display:flex;flex-wrap:wrap;gap:6px">'
+    + dsn.classes.map(c => '<button class="ghost'+(c.id===dsn.cls?' on':'')+
+        '" data-dc="'+c.id+'">'+esc(c.name)+'</button>').join('')
+    + '</div>');
+  out.push('<div class="item"><b>📐 组装【'+esc(dsn.cls_name)+'】</b>'
+    + '　基础耐久 '+dsn.base_hp
+    + '<div class="sub">逐槽点选模块（✅已拥有 / 🔒未研究，点已拥有的即可）；'
+    + '↑↓ 数字为 T 级与稀有度。右边实时预览，满意后填名字保存。</div></div>');
+  // 槽位选择
+  out.push('<div class="item">' + dsn.slots.map(s => {
+    const cur = dsnChosen[s.key];
+    const curOpt = s.options.find(o => o.id === cur);
+    const owned = s.options.filter(o => o.owned);
+    const locked = s.options.filter(o => !o.owned);
+    const req = s.required ? '<span style="color:#f5b942">★必选</span>' : '';
+    const head = '<div class="sub" style="padding:6px 0"><b>'+
+      (s.required?'★':'　')+esc(s.name)+'</b> '+req+
+      '　<span style="color:#7f97ad">已拥有 '+s.owned_count+'/'+s.options.length+'</span>'
+      + (curOpt ? ('　当前：<b>'+esc(curOpt.name)+'</b> T'+curOpt.tier
+                  + ' '+esc(curOpt.rarity_name)) : '　<span style="color:#f5b942">未选</span>')
+      + (s.required && !cur ? ' <span style="color:#f2555a">（必选，缺了不能保存）</span>' : '')
+      + '</div>';
+    const btn = (o) => '<button class="ghost'+(o.id===cur?' on':'')+'" data-ds="'+
+      s.key+'" data-dm="'+o.id+'"'+(o.owned?'':' disabled')
+      + ' title="'+esc(Object.entries(o.stats).map(([k,v])=>k+':'+v).join(' '))+'"'
+      + '>'+esc(o.name)+'<br><span style="font-size:10px;opacity:.75">T'+o.tier
+      + ' '+esc(o.rarity_name)+(o.owned?'':' 🔒')+'</span></button>';
+    return head
+      + '<div style="display:flex;flex-wrap:wrap;gap:5px">'
+      + (owned.length ? owned.map(btn).join('')
+         : '<span style="color:#f2555a">该槽位还没有可用模块，先去「🔬 科技」研究</span>')
+      + (locked.length ? '<details style="width:100%"><summary style="cursor:pointer;'
+         + 'color:#7f97ad;font-size:12px">🔒 未研究（'+locked.length+'）</summary>'
+         + '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px">'
+         + locked.map(btn).join('') + '</div></details>' : '')
+      + '</div>';
+  }).join('') + '</div>');
+  // 预览 + 保存
+  out.push('<div class="item" id="dsnPreview"><b>🔍 预览</b>'
+    + '<div class="sub">计算中…</div></div>');
+  // 已存设计
+  out.push('<div class="item" id="dsnSaved"><b>📐 我的设计（'+dsn.designs.length+'）</b>'
+    + (dsn.designs.length ? dsn.designs.map(d =>
+        '<div class="sub">#'+d.id+' <b>'+esc(d.name)+'</b>　'+esc(d.cls_name)
+        +' T'+d.tier+'　造价 '
+        + Object.entries(d.cost||{}).filter(([,v])=>v).map(([k,v])=>k+v).join(' ')
+        + '　工时 '+esc(d.work_text)
+        + '　<button class="ghost" data-prod="'+d.id+'" data-pname="'+esc(d.name)+'">'
+        + '去生产</button></div>').join('')
+      : '<div class="sub">还没有设计。选好模块后填名字保存。</div>')
+    + '</div>');
+  box.innerHTML = out.join('');
+  box.querySelectorAll('button[data-dc]').forEach(b => {
+    b.onclick = () => loadDesign(b.dataset.dc);
+  });
+  box.querySelectorAll('button[data-ds]').forEach(b => {
+    b.onclick = () => { dsnChosen[b.dataset.ds] = b.dataset.dm; renderDesign(); };
+  });
+  box.querySelectorAll('button[data-prod]').forEach(b => {
+    b.onclick = () => {
+      switchTab('cmd'); $('cmd').value = '生产 ' + b.dataset.pname + ' 1'; $('cmd').focus();
+    };
+  });
+  refreshPreview();
+}
+async function refreshPreview(){
+  const box = $('dsnPreview');
+  if (!box) return;
+  try {
+    const pv = await api('/api/design_preview', {method:'POST',
+      body: JSON.stringify({cls: dsn.cls, modules: dsnChosen})});
+    dsnPreview = pv;
+    const miss = (pv.missing_required||[]);
+    const costTxt = Object.entries(pv.cost||{}).filter(([,v])=>v)
+      .map(([k,v])=>k+v).join(' ') || '0';
+    box.innerHTML = '<b>🔍 预览</b>　T'+pv.tier
+      + '<div class="sub">'+esc(pv.stats_text||'')+'</div>'
+      + '<div class="sub">单舰造价：'+esc(costTxt)+'　工时 '+esc(pv.work_text)+'</div>'
+      + (miss.length ? '<div class="sub" style="color:#f2555a">还缺必选槽：'
+          + esc(miss.join('、'))+'</div>' : '')
+      + '<div class="sub" style="margin-top:6px">'
+      + '<input id="dsnName" placeholder="方案名（最多8字）" maxlength="8" '
+      + 'style="padding:4px 8px;border-radius:4px;border:1px solid #2a3d4d;'
+      + 'background:#0d1a24;color:#dfe9f3;width:140px">　'
+      + '<button class="ghost" id="dsnSave"'+(miss.length?' disabled':'')+'>'
+      + '💾 保存设计</button></div>';
+    const sv = $('dsnSave');
+    if (sv) sv.onclick = doSaveDesign;
+  } catch(e){
+    box.innerHTML = '<b>🔍 预览</b><div class="sub">预览失败：'+esc(e.message)+'</div>';
+  }
+}
+async function doSaveDesign(){
+  const nm = ($('dsnName')?.value || '').trim();
+  if (!nm){ say('请先填方案名', 'err'); $('dsnName')?.focus(); return; }
+  try {
+    const d = await api('/api/design_save', {method:'POST', body: JSON.stringify({
+      name: nm, cls: dsn.cls, modules: dsnChosen })});
+    say(d.text || '已保存', 'ok');
+    dsn = d.options; renderDesign();
+    loadAssets();
+  } catch(e){ say('保存失败：'+e.message, 'err'); }
 }
 
 /* ---------- 图形化研究 ---------- */

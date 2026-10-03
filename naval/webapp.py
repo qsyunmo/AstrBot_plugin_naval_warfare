@@ -412,6 +412,48 @@ class NavalWeb:
                     "options": _gov.research_options(self.conn, self.cfg, qq),
                     "queues": _gov.queue_snapshot(self.conn, self.cfg, qq)}
 
+        @app.get("/api/design_options")
+        async def design_options(request: Request, cls: str = None):
+            qq = self._qq_from_request(request)
+            if not qq:
+                return err("未登录", 401)
+            from . import gov as _gov
+
+            d = _gov.design_options(self.conn, self.cfg, qq, cls)
+            if not d.get("ok"):
+                return err(d.get("reason", "查询失败"), 404)
+            return d
+
+        @app.post("/api/design_preview")
+        async def design_preview(request: Request, payload: dict = Body(...)):
+            qq = self._qq_from_request(request)
+            if not qq:
+                return err("未登录", 401)
+            from . import gov as _gov
+
+            return _gov.preview_design(self.cfg, str(payload.get("cls", "")),
+                                       payload.get("modules") or {})
+
+        @app.post("/api/design_save")
+        async def design_save(request: Request, payload: dict = Body(...)):
+            qq = self._qq_from_request(request)
+            if not qq:
+                return err("未登录", 401)
+            from . import gov as _gov
+
+            try:
+                ok, text = _gov.save_design(
+                    self.conn, self.cfg, qq, str(payload.get("name", "")),
+                    str(payload.get("cls", "")), payload.get("modules") or {})
+            except Exception as e:
+                logger.exception("[海战模拟器][Web] 保存设计异常")
+                return err(f"保存失败：{type(e).__name__}", 500)
+            if not ok:
+                return err(text.lstrip("❌ "))
+            return {"ok": True, "text": text,
+                    "options": _gov.design_options(
+                        self.conn, self.cfg, qq, str(payload.get("cls", "")))}
+
         # ---------- 图形化数据 ----------
         @app.get("/api/map")
         async def map_data(request: Request, radius: int = 10,

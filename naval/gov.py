@@ -364,6 +364,141 @@ def do_research(conn, cfg, qq: str, origin: str, cls: str, tier: int,
                   f"完成自动推送。\n　想马上拿到？用快捷（花费×{emult}）立即出货。")
 
 
+def design_options(conn, cfg, qq: str, cls: str = None) -> dict:
+    """图形化「组装」所需数据：舰种 / 各槽位可选模块 / 已存设计。
+
+    「组装」在 QQ 侧是「浏览目录拿编号 → 输编号」两步，网页上直接做成
+    逐槽点选 + 实时预览。这里只提供数据，预览走 preview_design()。
+    """
+    mc = pools.mod_data()
+    p = conn.execute("SELECT qq,name FROM players WHERE qq=?", (qq,)).fetchone()
+    if not p:
+        return {"ok": False, "reason": "尚未注册"}
+    if cls not in mc["classes"]:
+        cls = next(iter(mc["classes"]))
+    cdef = mc["classes"][cls]
+    owned = pools.owned_ids(conn, qq)
+    slot_names = mc["slot_names"]
+
+    slots = []
+    for sk in cdef["slots"]:
+        opts = []
+        for tier in range(1, 6):
+            for m in sorted((x for x in pools.pool_modules(cls, tier)
+                             if x["slot"] == sk),
+                            key=lambda x: (pools.RARITY_ORDER.index(x["rarity"]),
+                                           x["tier"])):
+                info = pools.module_info(m["id"])
+                if not info:
+                    continue
+                opts.append({
+                    "id": m["id"], "name": info["name"], "tier": info["tier"],
+                    "rarity": info["rarity"],
+                    "rarity_name": pools.rarity_label(info["rarity"]),
+                    "owned": m["id"] in owned,
+                    "stats": info["stats"], "cost": info["cost"],
+                })
+        # 已拥有的排前面，方便直接点
+        opts.sort(key=lambda o: (not o["owned"],
+                                 pools.RARITY_ORDER.index(o["rarity"]), o["tier"]))
+        slots.append({
+            "key": sk, "name": slot_names.get(sk, sk),
+            "required": sk in (cdef.get("required") or []),
+            "slot_cost": (cdef.get("slot_cost") or {}).get(sk, {}),
+            "options": opts,
+            "owned_count": sum(1 for o in opts if o["owned"]),
+        })
+
+    designs = []
+    for d in conn.execute(
+            "SELECT id,name,ship_class,tier,stats_json,cost_json,work_ticks"
+            " FROM designs WHERE qq=? ORDER BY id", (qq,)).fetchall():
+        designs.append({
+            "id": d["id"], "name": d["name"], "cls": d["ship_class"],
+            "cls_name": mc["classes"].get(d["ship_class"], {}).get("name", ""),
+            "tier": d["tier"],
+            "stats": json.loads(d["stats_json"] or "{}"),
+            "cost": json.loads(d["cost_json"] or "{}"),
+            "work_ticks": d["work_ticks"],
+            "work_text": fmt_mins(int(d["work_ticks"] or 0)
+                                  * cfg["tick"]["economic_min"]),
+        })
+    yard = research.building_level(conn, *p_xy(conn, qq), "shipyard")
+    return {"ok": True, "cls": cls, "cls_name": cdef["name"],
+            "base_hp": cdef.get("base_hp"),
+            "classes": [{"id": k, "name": v["name"]}
+                        for k, v in mc["classes"].items()],
+            "slots": slots, "designs": designs,
+            "shipyard_lv": yard,
+            "max_qty": int(mc.get("max_produce_qty", 10)),
+            "tier_hp_mult": mc.get("tier_hp_mult")}
+
+
+def p_xy(conn, qq: str):
+    r = conn.execute("SELECT capital_x,capital_y FROM players WHERE qq=?",
+                     (qq,)).fetchone()
+    return ((r["capital_x"], r["capital_y"]) if r else (None, None))
+
+
+def preview_design(cfg, cls: str, chosen: dict) -> dict:
+    """实时预览（与保存时的计算完全同源，调 pools.ship_preview）。"""
+    mc = pools.mod_data()
+    if cls not in mc["classes"]:
+        return {"ok": False, "reason": "不认识该舰种"}
+    clean = {k: v for k, v in (chosen or {}).items() if v}
+    pv = pools.ship_preview(cls, clean)
+    dur = int(pv["work_ticks"]) * cfg["tick"]["economic_min"]
+    return {"ok": True, "tier": pv["tier"], "stats": pv["stats"],
+            "cost": pv["cost"], "work_ticks": pv["work_ticks"],
+            "work_text": fmt_mins(dur),
+            "missing_required": [mc["slot_names"].get(s, s)
+                                 for s in pv["missing_required"]],
+            "stats_text": pools.stats_text(pv["stats"])}
+
+
+def save_design(conn, cfg, qq: str, name: str, cls: str, chosen: dict):
+    """保存设计（与 QQ 侧 /nw组装 同一套校验）。返回 (ok, text)。"""
+    mc = pools.mod_data()
+    p = conn.execute("SELECT qq FROM players WHERE qq=?", (qq,)).fetchone()
+    if not p:
+        return False, "❌ 先 /nw注册"
+    if cls not in mc["classes"]:
+        return False, "❌ 不认识该舰种"
+    name = (name or "").strip()[:8]
+    if not name:
+        return False, "❌ 请给方案起个名字（最多 8 字）"
+    cname = mc["classes"][cls]["name"]
+    owned = pools.owned_ids(conn, qq)
+    chosen = {k: v for k, v in (chosen or {}).items() if v}
+    # 槽位/拥有校验（Web 传什么都不能绕过）
+    for sk, mid in chosen.items():
+        info = pools.module_info(mid)
+        if not info or info["cls"] != cls:
+            return False, f"❌ 模块 {mid} 不属于【{cname}】"
+        if sk not in mc["classes"][cls]["slots"]:
+            return False, f"❌【{mc['slot_names'].get(sk, sk)}】不是该舰种的槽位"
+        if mid not in owned:
+            return False, f"❌【{info['name']}】还未拥有，先研究抽蓝图"
+    pv = pools.ship_preview(cls, chosen)
+    if pv["missing_required"]:
+        miss = "、".join(mc["slot_names"].get(s, s) for s in pv["missing_required"])
+        return False, f"❌ 还缺少必选槽：{miss}"
+    if conn.execute("SELECT 1 FROM designs WHERE qq=? AND name=?",
+                    (qq, name)).fetchone():
+        return False, f"❌ 你已有设计【{name}】，换个名字"
+    conn.execute(
+        "INSERT INTO designs(qq,name,ship_class,tier,modules,stats_json,cost_json,"
+        "work_ticks) VALUES(?,?,?,?,?,?,?,?)",
+        (qq, name, cls, pv["tier"], json.dumps(chosen, ensure_ascii=False),
+         json.dumps(pv["stats"], ensure_ascii=False),
+         json.dumps(pv["cost"], ensure_ascii=False), pv["work_ticks"]))
+    conn.commit()
+    did = conn.execute("SELECT MAX(id) m FROM designs WHERE qq=?",
+                       (qq,)).fetchone()["m"]
+    return True, (f"✅ 设计【{name}】已保存（{cname} T{pv['tier']}，#{did}）。"
+                  f"去「🏗 建造」或 /nw生产 {name} <数量> 下船台。")
+
+
 def queue_snapshot(conn, cfg, qq: str) -> dict:
     """三条队列 + 剩余时间 + 加急价（供 Web 渲染）。"""
     tick = meta_get(conn, "econ_tick", int, 0)
