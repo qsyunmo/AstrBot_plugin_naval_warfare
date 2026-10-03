@@ -574,6 +574,30 @@ def _fire_side(conn, cfg, attackers: list, targets: list, round_no: int,
 
 # ---------- 结算 ----------
 
+def _loot_for(cfg: dict, faction: str, level) -> dict:
+    """战利品查表，**永不抛异常**。
+
+    原来是 `cfg["pirate"]["loot"][str(b["level"])]` —— 海盗表只有 L1~L3，
+    但 B 方可能是 L20/L30 的佣兵（merc 压根没有 loot 配置），于是 KeyError 把
+    整个战争 tick 的结算打断，那场战斗就永远卡在 active、之后每个 tick 都失败。
+    现在按「该阵营自己的表 → 海盗表 → 取不超过该等级的最高档 → 最低档」逐级回落。
+    """
+    for src in ((cfg.get(faction) or {}).get("loot"),
+                (cfg.get("pirate") or {}).get("loot")):
+        if not isinstance(src, dict) or not src:
+            continue
+        key = str(level)
+        if key in src:
+            return src[key]
+        # 取不超过该等级的最高档（等级超出表格时不再崩）
+        nums = sorted(int(k) for k in src if str(k).lstrip("-").isdigit())
+        below = [n for n in nums if n <= int(level or 0)]
+        pick = below[-1] if below else (nums[0] if nums else None)
+        if pick is not None:
+            return src[str(pick)]
+    return {"steel": 0, "money": 0}
+
+
 def _finish(conn, cfg, bid: int, war_tick: int, sides: dict, result: str,
             comp: list, detail: str):
     """result: victory/defeat/retreat。返回 (origin, summary) 或 None。"""
@@ -601,7 +625,7 @@ def _finish(conn, cfg, bid: int, war_tick: int, sides: dict, result: str,
             summary = _plunder(conn, cfg, a["qq"], b["ai_fleet_id"], pr, war_tick,
                                bside_faction)
         else:
-            loot = cfg["pirate"]["loot"][str(b["level"])]
+            loot = _loot_for(cfg, bside_faction, b.get("level"))
             co = a.get("co") or []
             if co:
                 # §27.6 协讨：掠夺所得按伤害贡献分给各方

@@ -336,6 +336,12 @@
     "names": ["白鲸佣兵团", "黑潮佣兵团", "铁锚佣兵团", "灰雁佣兵团"],
     "min_days": 3,
     "max_days": 30,
+    "_loot": "§26.2 击溃雇佣军团的战利品（按 merc.levels 的 8/20/30 分档）。原来这张表缺失，打赢佣兵时 _finish 里查 pirate.loot 会 KeyError，把整个战争 tick 的结算打断、该场战斗永远卡在 active",
+    "loot": {
+      "8":  { "steel": 300,  "money": 400 },
+      "20": { "steel": 900,  "money": 1400 },
+      "30": { "steel": 1800, "money": 3000 }
+    },
     "levels": {
       "8":  { "comp": [["destroyer", 2, 2], ["light_cruiser", 2, 1]],
               "price_per_day": 300, "oil": 200, "supply": 150 },

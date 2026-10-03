@@ -278,6 +278,7 @@ function buildTabs(){
   switchTab('map');
 }
 function switchTab(k){
+  if (k !== 'battle') stopLive();
   curTab = k;
   [...$('tabs').children].forEach(b => b.classList.toggle('on', b.dataset.k === k));
   TABS.forEach(([t]) => $('pane-'+t).classList.toggle('on', t === k));
@@ -1291,22 +1292,61 @@ async function loadBattles(){
       $('battleView').innerHTML = '';
       return;
     }
-    box.innerHTML = '<div class="item"><b>🎬 我的战斗</b>' + bs.map(b =>
+    // 交战中的排最前，一眼就能点进去看
+    bs.sort((x, y) => ((y.status === 'active') ? 1 : 0)
+                     - ((x.status === 'active') ? 1 : 0));
+    const active = bs.filter(b => b.status === 'active');
+    box.innerHTML = '<div class="item"><b>🎬 我的战斗</b>'
+      + (active.length ? '<div class="sub" style="color:#f2555a">🔴 有 '
+          + active.length + ' 场正在交战（点进去可实时观战）</div>' : '')
+      + bs.map(b =>
       '<div class="sub" style="cursor:pointer" data-bid="'+b.id+'">'+
-      (b.won?'🏆':(b.lost?'☠️':'↩️')) + ' #'+b.id+'　vs '+esc(b.opponent)+
+      (b.status === 'active' ? '🔴' : (b.won?'🏆':(b.lost?'☠️':'↩️'))) +
+      ' #'+b.id+'　vs '+esc(b.opponent)+
       '　('+b.x+','+b.y+')　'+b.rounds+' 轮　'+
-      (b.detail?esc(b.detail):(b.status==='active'?'进行中':'已结束'))+
+      (b.status === 'active' ? '<b style="color:#f2555a">交战中</b>'
+        : (b.detail?esc(b.detail):'已结束'))+
       '</div>').join('') + '</div>';
     box.querySelectorAll('[data-bid]').forEach(el => el.onclick = () => openBattle(+el.dataset.bid));
+    // 有交战就自动打开最新那场，不用手动找
+    if (active.length && !battleData) openBattle(active[0].id);
   } catch(e){ box.innerHTML = '<div class="empty">战报加载失败：'+esc(e.message)+'</div>'; }
 }
 async function openBattle(bid){
   try {
+    stopReplay(); stopLive();
     battleData = await api('/api/battle/' + bid);
-    replayRound = 0; stopReplay(); renderBattle();
+    replayRound = (battleData.rounds||[]).length;   // 打开即看最新一轮
+    if (battleData.status === 'active') startLive(bid);
+    renderBattle();
   } catch(e){ $('battleView').innerHTML = '<div class="empty">'+esc(e.message)+'</div>'; }
 }
 function stopReplay(){ if (replayTimer){ clearInterval(replayTimer); replayTimer = null; } }
+
+/* ---------- 🔴 实时战场 ----------
+   交战中每 5 秒拉一次 /api/battlefield（只读接口，不会推进战斗），
+   并把回放指针顶到最新一轮——这样看着就是「战场在动」。 */
+let liveTimer = null, liveData = null, liveBid = null;
+const LIVE_MS = 5000;
+function stopLive(){ if (liveTimer){ clearInterval(liveTimer); liveTimer = null; } }
+async function pollBattlefield(bid){
+  try {
+    const bf = await api('/api/battlefield/' + bid);
+    liveData = bf;
+    if (bf.round_no > replayRound) replayRound = bf.round_no;
+    if (typeof battleData !== 'undefined') battleData.status = bf.status;
+    if (!bf.active){ stopLive(); }
+    renderBattle();
+  } catch(e){ /* 轮询失败不打断观战，下个周期再试 */ }
+}
+function startLive(bid){
+  stopLive();
+  liveBid = bid;
+  liveData = null;
+  pollBattlefield(bid);
+  liveTimer = setInterval(() => pollBattlefield(bid), LIVE_MS);
+}
+
 function hpBar(label, hp, mx, units){
   const pct = mx > 0 ? Math.max(0, Math.min(100, hp / mx * 100)) : 0;
   const color = pct > 66 ? '#25d0a5' : (pct > 33 ? '#f5b942' : '#f2555a');
@@ -1362,7 +1402,43 @@ function renderBattle(){
     out.push('<div class="item"><b>🏁 战报</b>' +
       d.summary.split('\n').map(l => '<div class="sub">'+esc(l)+'</div>').join('') + '</div>');
   }
+  // 🔴 实时战场面板（仅交战中的战斗有 liveData）
+  if (liveData && liveData.active){
+    const lv = liveData;
+    const mine = lv.my_side === 'A' ? lv.a : lv.b;
+    const foe  = lv.my_side === 'A' ? lv.b : lv.a;
+    out.unshift('<div class="item" style="border:1px solid #f2555a">'
+      + '<b>🔴 实时战场</b>　战斗 #'+lv.id+'　('+lv.x+','+lv.y+')　'
+      + '<span style="color:#f2555a">第 '+lv.round_no+' 轮</span>'
+      + '<div class="sub">每 '+Math.round(LIVE_MS/1000)+' 秒自动刷新（界面上会跟着动）'
+      + '　<button class="ghost" id="liveStop">⏸ 停止刷新</button>'
+      + '　<button class="ghost" id="liveNow">⟳ 立即刷新</button></div>'
+      + hpBar('我方 '+mine.name+'（你）', mine.hp, mine.max, mine.units)
+      + hpBar('敌方 '+foe.name, foe.hp, foe.max, foe.units)
+      + (lv.my_units_total
+          ? '<div class="sub">我方逐舰（存活 <b>' + lv.my_units_alive + '/'
+            + lv.my_units_total + '</b>'
+            + (lv.my_units_total > lv.my_units.length
+                ? '，下面只列前 ' + lv.my_units.length + ' 艘' : '')
+            + '）：' + lv.my_units.slice(0, 12).map(u =>
+              (u.alive ? '' : '<s>') + esc(u.name) + ' ' + fmt(u.hp)
+              + (u.alive ? '' : '</s>')).join('、')
+            + (lv.my_units.length > 12 ? ' …' : '') + '</div>'
+          : '')
+      + (lv.last_round && lv.last_round.length
+          ? '<div class="sub" style="margin-top:4px"><b>本轮</b>'
+            + (lv.last_round_total > lv.last_round.length
+                ? '<span style="opacity:.7">（共 '+lv.last_round_total
+                  +' 行，列前 '+lv.last_round.length+' 行）</span>' : '')
+            + '</div>'
+            + lv.last_round.map(l =>
+                '<div class="sub">'+esc(l)+'</div>').join('')
+          : '')
+      + '</div>');
+  }
   box.innerHTML = out.join('');
+  if ($('liveStop')) $('liveStop').onclick = () => { stopLive(); renderBattle(); };
+  if ($('liveNow')) $('liveNow').onclick = () => pollBattlefield(liveBid || d.id);
   if ($('rvMap')) $('rvMap').onclick = () => focusOnMap(d.x, d.y, '#'+d.id);
   $('rvPrev').onclick = () => { stopReplay(); replayRound = Math.max(0, replayRound-1); renderBattle(); };
   $('rvNext').onclick = () => { stopReplay(); replayRound = Math.min(total, replayRound+1); renderBattle(); };

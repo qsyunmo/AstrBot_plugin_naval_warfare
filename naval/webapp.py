@@ -36,6 +36,11 @@ from . import pools
 
 STATIC_DIR = Path(__file__).parent / "webstatic"
 PUSH_KEEP = 200          # 每个玩家最多保留多少条待取推送
+# 战场「我方逐舰」一次最多回多少条（批量生产后一支舰队可达数千艘，
+# 全塞进 JSON 会让每 5 秒一次的轮询传几百 KB）
+UNIT_PREVIEW = 60
+# 战场「本轮流水」一次最多回多少行（大编队一轮能刷出几百行）
+ROUND_PREVIEW = 40
 BODY_LIMIT = 64 * 1024
 
 # §19.1 舰员档位的中文名（前端直接显示）
@@ -657,6 +662,17 @@ class NavalWeb:
                 return err("未登录", 401)
             return {"ok": True, "battles": self._my_battles(qq, limit)}
 
+        @app.get("/api/battlefield/{bid}")
+        async def battlefield(request: Request, bid: int):
+            """交战中的实时战场状态（Web 轮询用，只读）。"""
+            qq = self._qq_from_request(request)
+            if not qq:
+                return err("未登录", 401)
+            d = self._battlefield(qq, bid)
+            if not d:
+                return err("找不到该战斗，或你不是参战方", 404)
+            return {"ok": True, **d}
+
         @app.get("/api/battle/{bid}")
         async def battle_detail(request: Request, bid: int):
             """§27.6 一场战斗的完整回放数据（逐轮流水 + 功勋表）。"""
@@ -954,6 +970,100 @@ class NavalWeb:
                 "lost": "全军覆没" in (r["summary"] or ""),
             })
         return out
+
+    def _battlefield(self, qq: str, bid: int) -> dict:
+        """交战中的**实时**战场状态（供 Web 轮询）。
+
+        只读，不碰战斗状态机 —— 数据全部来自已有的 battle_rounds 快照与
+        battle_events 流水，所以轮询是安全的。
+        """
+        q = str(qq)
+        r = self.conn.execute("SELECT * FROM battles WHERE id=?", (bid,)).fetchone()
+        if not r:
+            return {}
+        try:
+            sides = json.loads(r["sides_json"] or "{}")
+        except (TypeError, ValueError):
+            sides = {}
+        a, b = sides.get("A") or {}, sides.get("B") or {}
+
+        def _side_name(sd):
+            if sd.get("qq"):
+                nm = self.conn.execute("SELECT name FROM players WHERE qq=?",
+                                       (sd["qq"],)).fetchone()
+                return nm["name"] if nm else str(sd["qq"])
+            return _ai_name(self.conn, sd)
+
+        my = "A" if a.get("qq") == q else ("B" if b.get("qq") == q else None)
+        if my is None:
+            return {}
+
+        snap = self.conn.execute(
+            "SELECT * FROM battle_rounds WHERE battle_id=?"
+            " ORDER BY round_no DESC, id DESC LIMIT 1", (bid,)).fetchone()
+        rno = self.conn.execute(
+            "SELECT MAX(round_no) m FROM battle_events WHERE battle_id=?",
+            (bid,)).fetchone()["m"] or 0
+        last = [e["text"] for e in self.conn.execute(
+            "SELECT text FROM battle_events WHERE battle_id=? AND round_no=?"
+            " ORDER BY id", (bid, rno)).fetchall()]
+        # 大编队一轮能刷出几百行（一艘一行的命中/击沉），实时面板只放前 40 行
+        last_total = len(last)
+        last = last[:ROUND_PREVIEW]
+
+        def _side(sd, name, hp, mx, n):
+            return {"name": name, "hp": hp or 0, "max": mx or 0, "units": n or 0,
+                    "is_me": sd.get("qq") == q,
+                    "pct": round(100.0 * (hp or 0) / mx, 1) if mx else 0.0}
+
+        # 我方的逐舰明细（实时 HP 直读 ships 表）。
+        # 只回前 UNIT_PREVIEW 条 —— 批量生产后一支舰队可能有几千艘，
+        # 全塞进 JSON 会让每次轮询都传几百 KB。总/存活数另用聚合查询给。
+        my_units = []
+        my_total = my_alive = 0
+        try:
+            mine = a if my == "A" else b
+            ids = []
+            if mine.get("fleet_id") is not None:
+                ids.append(mine["fleet_id"])
+            ids += list(mine.get("fleet_ids") or [])
+            ids = sorted({i for i in ids if i is not None})
+            if ids:
+                ph = ",".join("?" * len(ids))
+                row = self.conn.execute(
+                    f"SELECT COUNT(*) n, SUM(CASE WHEN COALESCE(hp,0)>0 THEN 1 ELSE 0 END) a"
+                    f" FROM ships WHERE fleet_id IN ({ph})", tuple(ids)).fetchone()
+                my_total, my_alive = int(row["n"] or 0), int(row["a"] or 0)
+                for s in self.conn.execute(
+                        f"SELECT name,tier,hp,max_hp FROM ships WHERE fleet_id IN ({ph})"
+                        f" ORDER BY (COALESCE(hp,0)>0) DESC, id LIMIT ?",
+                        (*ids, UNIT_PREVIEW)).fetchall():
+                    my_units.append({"name": s["name"], "tier": s["tier"],
+                                     "hp": s["hp"], "max_hp": s["max_hp"],
+                                     "alive": (s["hp"] or 0) > 0})
+        except Exception:
+            logger.exception("[海战模拟器] 战场逐舰明细异常")
+            my_units = []
+
+        return {
+            "id": r["id"], "status": r["status"],
+            "active": str(r["status"]) == "active",
+            "x": r["x"], "y": r["y"],
+            "round_no": int(rno),
+            "my_side": my,
+            "a": _side(a, _side_name(a),
+                       snap["a_hp"] if snap else None,
+                       snap["a_max"] if snap else None,
+                       snap["a_units"] if snap else None),
+            "b": _side(b, _side_name(b),
+                       snap["b_hp"] if snap else None,
+                       snap["b_max"] if snap else None,
+                       snap["b_units"] if snap else None),
+            "last_round": last, "last_round_total": last_total,
+            "my_units": my_units,
+            "my_units_total": my_total,
+            "my_units_alive": my_alive,
+        }
 
     def _battle_detail(self, qq: str, bid: int) -> dict:
         """一场战斗的完整回放数据：逐轮事件 + 功勋表。"""

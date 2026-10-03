@@ -51,6 +51,7 @@ COMMANDS = {
     "攻击": ("attack_cmd", True, ["进攻"], "接敌攻击 <舰队> <x,y>"),
     "撤退": ("retreat_cmd", True, [], "撤离接触 <舰队>"),
     "战报": ("battle_report", True, [], "战报列表/详情 [id]"),
+    "战场": ("battlefield", True, ["交战"], "交战中的实时战场 [id]"),
     "海图": ("chart", True, [], "周边海图"),
     # —— P2b §4：攻防任务 ——
     "驻防": ("garrison", True, [], "驻防当前格（受击减免+自动迎击）"),
@@ -2932,6 +2933,77 @@ class GameCommands:
         self.conn.commit()
         return (f"↩️【{f['name']}】已下令撤退，将在下一个战争 tick（约 "
                 f"{_fmt_min(self.cfg['tick']['war_min'])} 分钟）脱离接触。")
+
+    def _active_battles(self, qq: str) -> list:
+        """我正在交战的战斗（A 方或 PvP 里的 B 方）。"""
+        q = str(qq)
+        out = []
+        for b in self.conn.execute(
+                "SELECT * FROM battles WHERE status='active' ORDER BY id DESC").fetchall():
+            try:
+                sides = json.loads(b["sides_json"] or "{}")
+            except (TypeError, ValueError):
+                continue
+            a, bs = sides.get("A") or {}, sides.get("B") or {}
+            if q in (a.get("qq"), bs.get("qq")):
+                out.append((b, a, bs))
+        return out
+
+    @staticmethod
+    def _hp_bar(hp: float, mx: float, width: int = 10) -> str:
+        pct = max(0.0, min(100.0, (hp / mx * 100) if mx else 0.0))
+        full = int(round(pct / 100 * width))
+        return "█" * full + "░" * (width - full) + f" {pct:.0f}%"
+
+    async def battlefield(self, ctx: Ctx) -> str:
+        """交战中的实时战场（只看当前状态，不倒全部流水）。"""
+        if not self._player(ctx.qq):
+            return "❌ 还未注册，先 /nw注册"
+        mine = self._active_battles(ctx.qq)
+        if not mine:
+            return ("⚔️ 当前没有交战中的战斗。\n"
+                    "找目标：/nw海图 看 ⚓ 海盗据点")
+        if ctx.args and str(ctx.args[0]).lstrip("#").isdigit():
+            want = int(str(ctx.args[0]).lstrip("#"))
+            mine = [m for m in mine if m[0]["id"] == want] or mine
+        b, a, bs = mine[0]
+        snap = self.conn.execute(
+            "SELECT * FROM battle_rounds WHERE battle_id=?"
+            " ORDER BY round_no DESC, id DESC LIMIT 1", (b["id"],)).fetchone()
+        rno = self.conn.execute(
+            "SELECT MAX(round_no) m FROM battle_events WHERE battle_id=?",
+            (b["id"],)).fetchone()["m"] or 0
+        last = [e["text"] for e in self.conn.execute(
+            "SELECT text FROM battle_events WHERE battle_id=? AND round_no=?"
+            " ORDER BY id", (b["id"], rno)).fetchall()]
+
+        def nm(sd):
+            if sd.get("qq"):
+                r = self.conn.execute("SELECT name FROM players WHERE qq=?",
+                                      (sd["qq"],)).fetchone()
+                return r["name"] if r else str(sd["qq"])
+            return str(sd.get("name") or sd.get("faction") or "敌方")
+
+        me_is_a = a.get("qq") == ctx.qq
+        me, foe = ("A", "B") if me_is_a else ("B", "A")
+        lines = [f"⚔️ 战场 #{b['id']}　({b['x']},{b['y']})　第 {rno} 轮"
+                 + (f"　（共 {len(mine)} 场交战中，/nw战场 <id> 切换）"
+                    if len(mine) > 1 else "")]
+        for tag, sd in ((me, a if me_is_a else bs), (foe, bs if me_is_a else a)):
+            side = "我方" if tag == me else "敌方"
+            if snap is None:
+                lines.append(f"　{side} {nm(sd)}：尚无兵力快照")
+                continue
+            hp = snap["a_hp" if tag == "A" else "b_hp"]
+            mx = snap["a_max" if tag == "A" else "b_max"]
+            n = snap["a_units" if tag == "A" else "b_units"]
+            lines.append(f"　{side} {nm(sd)}　{self._hp_bar(hp, mx)}"
+                         f"　HP {hp:.0f}/{mx:.0f}　舰 {n}")
+        if last:
+            lines.append("　── 本轮 ──")
+            lines += ["　" + t for t in last[:10]]
+        lines.append(f"　（/nw战报 {b['id']} 看逐轮全流水；Web 战报页可实时观战）")
+        return "\n".join(lines)
 
     async def battle_report(self, ctx: Ctx) -> str:
         if not self._player(ctx.qq):
