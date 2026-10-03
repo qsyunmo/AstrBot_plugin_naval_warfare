@@ -58,9 +58,9 @@ def fmt_mins(m: int) -> str:
         return f"{m} 分钟"
     h, mm = divmod(m, 60)
     if h < 24:
-        return f"{h} 小时" + (f"{mm} 分" if mm else "")
+        return (f"{h} 小时 " + f"{mm} 分") if mm else f"{h} 小时"
     d, hh = divmod(h, 24)
-    return f"{d} 天" + (f"{hh} 小时" if hh else "")
+    return (f"{d} 天 " + f"{hh} 小时") if hh else f"{d} 天"
 
 
 _fmt_mins = fmt_mins   # 兼容内部旧调用
