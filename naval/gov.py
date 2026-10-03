@@ -253,6 +253,117 @@ def do_build(conn, cfg, qq: str, origin: str, def_id: str,
                             for k in costs if _rush_cost(cfg, costs)[k] > costs[k]))
 
 
+def research_options(conn, cfg, qq: str) -> dict:
+    """可研究的「舰种 × 代际」清单（供 Web 图形化研究面板）。
+
+    每项含：cls/cls_name/tier/cost_normal/cost_express/dur_sec/dur_text/
+    pool_owned/pool_size/can_normal/can_express/missing_*/blocked。
+    """
+    mc = pools.mod_data()
+    p = conn.execute("SELECT * FROM players WHERE qq=?", (qq,)).fetchone()
+    if not p or p["capital_x"] is None:
+        return {"ok": False, "reason": "尚未注册"}
+    lab_lv, proving_lv, lx, ly = research.lab_info(conn, qq)
+    slots = research.research_slots(lab_lv)
+    active = research.active_research(conn, qq)
+    owned = pools.owned_ids(conn, qq)
+    dur = research.research_duration(cfg, mc, proving_lv)
+    emult = int(mc.get("express_mult", 10))
+
+    out = []
+    for cls, cdef in mc["classes"].items():
+        for tier in range(1, 6):
+            rc = mc["research_cost"].get(str(tier)) or {}
+            normal = {k: rc.get(k, 0) for k in
+                      ("science", "money", "rare_earth", "chips")}
+            express = {k: v * emult for k, v in normal.items()}
+            pool = pools.pool_modules(cls, tier)
+            pown = len({m["id"] for m in pool} & owned)
+            blocked = ""
+            if lab_lv < 1:
+                blocked = "尚无研究所"
+            elif lab_lv < tier:
+                blocked = f"需研究所 Lv{tier}（当前 Lv{lab_lv}）"
+            miss_n = _short(p, normal)
+            miss_e = _short(p, express)
+            out.append({
+                "cls": cls, "cls_name": cdef["name"], "tier": tier,
+                "tier_name": f"T{tier}",
+                "cost_normal": normal, "cost_express": express,
+                "express_mult": emult,
+                "dur_sec": dur, "dur_text": fmt_mins(dur // 60),
+                "pool_owned": pown, "pool_size": len(pool),
+                "pool_pct": round(pown / len(pool) * 100) if pool else 0,
+                "missing_normal": miss_n, "missing_express": miss_e,
+                "blocked": blocked,
+                "can_normal": (not blocked) and (not miss_n) and (active < slots),
+                "can_express": (not blocked) and (not miss_e),
+                "slots_full": active >= slots,
+                "required": list(cdef.get("required") or []),
+            })
+    return {"ok": True, "lab_lv": lab_lv, "proving_lv": proving_lv,
+            "slots": slots, "active": active,
+            "express_mult": emult, "duration_text": fmt_mins(dur // 60),
+            "tiers": out}
+
+
+def do_research(conn, cfg, qq: str, origin: str, cls: str, tier: int,
+                mode: str = "normal"):
+    """下单研究。mode: normal（排队）| express（立即出货，花费×express_mult）。
+
+    返回 (ok, text)。normal 模式下若研究位已满会被拒。
+    """
+    mc = pools.mod_data()
+    p = conn.execute("SELECT * FROM players WHERE qq=?", (qq,)).fetchone()
+    if not p or p["capital_x"] is None:
+        return False, "❌ 先 /nw注册"
+    if cls not in mc["classes"]:
+        return False, "❌ 不认识该舰种"
+    if not (1 <= int(tier) <= 5):
+        return False, "❌ 等级应为 T1~T5"
+    tier = int(tier)
+    lab_lv, proving_lv, _, _ = research.lab_info(conn, qq)
+    if lab_lv < 1:
+        return False, "❌ 首都还没有【研究所】，先建一座"
+    if lab_lv < tier:
+        return False, f"❌ T{tier} 池需要研究所 Lv{tier}（当前 Lv{lab_lv}）"
+    cname = mc["classes"][cls]["name"]
+    rc = mc["research_cost"].get(str(tier)) or {}
+    normal = {k: rc.get(k, 0) for k in ("science", "money", "rare_earth", "chips")}
+    emult = int(mc.get("express_mult", 10))
+    express = {k: v * emult for k, v in normal.items()}
+    dur = research.research_duration(cfg, mc, proving_lv)
+
+    if mode == "express":
+        cost = express
+        miss = _short(p, cost)
+        if miss:
+            return False, "❌ 资源不足：缺 " + "、".join(miss)
+        _pay(conn, qq, cost)
+        result = research.roll_gacha(conn, mc, qq, cls, tier)
+        conn.commit()
+        txt = research.gacha_text(mc, cls, tier, result)
+        return True, f"⚡【{cname} T{tier}】快捷研究（花费×{emult}）\n{txt}"
+
+    slots = research.research_slots(lab_lv)
+    active = research.active_research(conn, qq)
+    if active >= slots:
+        return False, (f"❌ 研究所 Lv{lab_lv} 只有 {slots} 个并行研究位，当前已满。"
+                       f"可改用快捷（花费×{emult}）立即出货")
+    miss = _short(p, normal)
+    if miss:
+        return False, "❌ 资源不足：缺 " + "、".join(miss)
+    _pay(conn, qq, normal)
+    now = int(time.time())
+    conn.execute(
+        "INSERT INTO research_queue(qq,origin,unit_type,tier,mode,start_ts,end_ts)"
+        " VALUES(?,?,?,?, 'normal',?,?)",
+        (qq, origin or f"web:{qq}", cls, tier, now, now + dur))
+    conn.commit()
+    return True, (f"🔬【{cname} T{tier}】已下单（普通），约 {fmt_mins(dur//60)} 出蓝图，"
+                  f"完成自动推送。\n　想马上拿到？用快捷（花费×{emult}）立即出货。")
+
+
 def queue_snapshot(conn, cfg, qq: str) -> dict:
     """三条队列 + 剩余时间 + 加急价（供 Web 渲染）。"""
     tick = meta_get(conn, "econ_tick", int, 0)

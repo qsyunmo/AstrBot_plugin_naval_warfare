@@ -373,6 +373,45 @@ class NavalWeb:
             return {"ok": True, "text": text,
                     "queues": _gov.queue_snapshot(self.conn, self.cfg, qq)}
 
+        @app.get("/api/research_options")
+        async def research_options(request: Request):
+            qq = self._qq_from_request(request)
+            if not qq:
+                return err("未登录", 401)
+            from . import gov as _gov
+
+            d = _gov.research_options(self.conn, self.cfg, qq)
+            if not d.get("ok"):
+                return err(d.get("reason", "查询失败"), 404)
+            return d
+
+        @app.post("/api/research")
+        async def research_start(request: Request, payload: dict = Body(...)):
+            qq = self._qq_from_request(request)
+            if not qq:
+                return err("未登录", 401)
+            from . import gov as _gov
+
+            cls = str(payload.get("cls", ""))
+            mode = str(payload.get("mode", "normal"))
+            try:
+                tier = int(payload.get("tier"))
+            except (TypeError, ValueError):
+                return err("tier 应为数字")
+            if mode not in ("normal", "express"):
+                return err("mode 应为 normal 或 express")
+            try:
+                ok, text = _gov.do_research(self.conn, self.cfg, qq,
+                                            f"web:{qq}", cls, tier, mode)
+            except Exception as e:
+                logger.exception("[海战模拟器][Web] 研究异常")
+                return err(f"研究失败：{type(e).__name__}", 500)
+            if not ok:
+                return err(text.lstrip("❌ "))
+            return {"ok": True, "text": text,
+                    "options": _gov.research_options(self.conn, self.cfg, qq),
+                    "queues": _gov.queue_snapshot(self.conn, self.cfg, qq)}
+
         # ---------- 图形化数据 ----------
         @app.get("/api/map")
         async def map_data(request: Request, radius: int = 10,

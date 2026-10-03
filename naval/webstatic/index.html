@@ -167,6 +167,7 @@
     </div>
 
     <div class="pane" id="pane-tech">
+      <div class="list" id="researchActions"></div>
       <div class="list" id="techList"></div>
     </div>
 
@@ -277,8 +278,101 @@ function switchTab(k){
   TABS.forEach(([t]) => $('pane-'+t).classList.toggle('on', t === k));
   if (k === 'map') loadMap();
   if (k === 'build') loadBuild();
+  if (k === 'tech') loadResearchOptions();
   if (k === 'fleet' || k === 'assets' || k === 'diplo' || k === 'tech') loadAssets();
   if (k === 'battle') loadBattles();
+}
+
+/* ---------- 图形化研究 ---------- */
+let rschData = null, rschCls = null;
+async function loadResearchOptions(){
+  const box = $('researchActions');
+  if (!box) return;
+  box.innerHTML = '<div class="empty">载入中…</div>';
+  try {
+    const d = await api('/api/research_options');
+    rschData = d;
+    if (!rschCls || !d.tiers.some(t => t.cls === rschCls)) rschCls = d.tiers[0].cls;
+    renderResearch(d);
+  } catch(e){
+    box.innerHTML = '<div class="empty">研究面板加载失败：'+esc(e.message)+'</div>';
+  }
+}
+function renderResearch(d){
+  const box = $('researchActions');
+  const out = [];
+  const lab = d.lab_lv || 0;
+  out.push('<div class="item"><b>🔬 开始研究</b>'
+    + '　研究所 Lv'+lab
+    + '　并行位 <b>'+d.active+'/'+d.slots+'</b>'
+    + (lab < 1 ? '　<span style="color:#f2555a">尚无研究所，先去「🏗 建造」建一座</span>'
+       : (lab < 5 ? '　<span style="color:#7f97ad">升级研究所可解锁更高的 T 池</span>' : ''))
+    + '<div class="sub">选舰种 → 选代际 → 点「普通研究」排队，或「⚡立即出货」跳过等待'
+    + '（花费 ×'+d.express_mult+'）</div></div>');
+  // 舰种选择
+  const classes = [...new Set(d.tiers.map(t => t.cls))];
+  out.push('<div class="item" style="display:flex;flex-wrap:wrap;gap:6px">'
+    + classes.map(c => {
+        const nm = d.tiers.find(t => t.cls === c).cls_name;
+        return '<button class="ghost'+(c===rschCls?' on':'')+'" data-rc="'+c+'">'
+          + esc(nm) + '</button>';
+      }).join('') + '</div>');
+  // 该舰种的 T1~T5
+  const rows = d.tiers.filter(t => t.cls === rschCls);
+  out.push('<div class="item">' + rows.map(t => {
+    const blocked = t.blocked;
+    const state = blocked
+      ? '<span style="color:#5a6e80">🔒 '+esc(blocked)+'</span>'
+      : (t.can_normal ? '<span style="color:#25d0a5">可研究</span>'
+        : (t.slots_full ? '<span style="color:#f5b942">研究位已满</span>'
+          : '<span style="color:#f2555a">缺 '+esc(t.missing_normal.join('、'))+'</span>'));
+    const cn = t.cost_normal, ce = t.cost_express;
+    const fmtC = (c) => [['科研',c.science],['资金',c.money],
+                         ['稀土',c.rare_earth],['芯片',c.chips]]
+                         .filter(([,v]) => v).map(([k,v]) => k+v).join(' ');
+    return '<div class="sub" style="padding:5px 0;border-top:1px solid #1b2b38">'
+      + '<b>'+t.tier_name+'</b>　'
+      + '<span style="display:inline-block;width:70px;height:7px;background:#12222f;'
+      + 'border-radius:4px;vertical-align:middle"><i style="display:block;height:7px;'
+      + 'width:'+t.pool_pct+'%;background:#3fa9f5;border-radius:4px"></i></span>'
+      + ' '+t.pool_owned+'/'+t.pool_size
+      + '　'+state
+      + '<br>　普通 '+esc(fmtC(cn))+'　约 '+esc(t.dur_text)
+      + '　<button class="ghost" data-rn="'+t.cls+'" data-rt="'+t.tier+'"'
+      + (t.can_normal ? '' : ' disabled') + '>普通研究</button>'
+      + '<br>　快捷 '+esc(fmtC(ce))+'（×'+t.express_mult+'）立即出货'
+      + '　<button class="ghost" data-re="'+t.cls+'" data-rt="'+t.tier+'"'
+      + (t.can_express ? '' : ' disabled') + '>⚡立即出货</button>'
+      + '</div>';
+  }).join('') + '</div>');
+  box.innerHTML = out.join('');
+  box.querySelectorAll('button[data-rc]').forEach(b => {
+    b.onclick = () => { rschCls = b.dataset.rc; renderResearch(rschData); };
+  });
+  box.querySelectorAll('button[data-rn]').forEach(b => {
+    b.onclick = () => doResearch(b.dataset.rn, +b.dataset.rt, 'normal');
+  });
+  box.querySelectorAll('button[data-re]').forEach(b => {
+    b.onclick = () => doResearch(b.dataset.re, +b.dataset.rt, 'express');
+  });
+}
+async function doResearch(cls, tier, mode){
+  const t = rschData.tiers.find(x => x.cls === cls && x.tier === tier);
+  const nm = t ? (t.cls_name + ' ' + t.tier_name) : (cls + ' T' + tier);
+  if (mode === 'express'){
+    if (!confirm('⚡ 立即出货 ' + nm + ' ？\n花费 ×' + (t ? t.express_mult : 10)
+        + '（会立刻拿到一张蓝图）')) return;
+  } else {
+    if (!confirm('研究 ' + nm + ' ？\n约 ' + (t ? t.dur_text : '') + ' 后出蓝图')) return;
+  }
+  try {
+    const d = await api('/api/research', {method:'POST',
+      body: JSON.stringify({cls: cls, tier: tier, mode: mode})});
+    say(d.text || '已提交', 'ok');
+    rschData = d.options; renderResearch(d.options);
+    loadAssets();
+    say('（刷新「🔬 科技」可看最新收集进度）', 'bot');
+  } catch(e){ say('研究失败：'+e.message, 'err'); }
 }
 
 /* ---------- 图形化建造 ---------- */
