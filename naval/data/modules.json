@@ -6,35 +6,35 @@
    "money": 100,
    "rare_earth": 0,
    "chips": 0,
-   "sec": 300
+   "sec": 120
   },
   "2": {
    "science": 80,
    "money": 250,
    "rare_earth": 0,
    "chips": 0,
-   "sec": 300
+   "sec": 120
   },
   "3": {
    "science": 200,
    "money": 600,
    "rare_earth": 0,
    "chips": 0,
-   "sec": 300
+   "sec": 120
   },
   "4": {
    "science": 450,
    "money": 1200,
    "rare_earth": 10,
    "chips": 0,
-   "sec": 300
+   "sec": 120
   },
   "5": {
    "science": 1000,
    "money": 2500,
    "rare_earth": 30,
    "chips": 2,
-   "sec": 300
+   "sec": 120
   }
  },
  "express_mult": 10,

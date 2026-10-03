@@ -636,7 +636,7 @@ def _finish(conn, cfg, bid: int, war_tick: int, sides: dict, result: str,
                             "、".join(_player_name(conn, q) for q in a["co"]))
             summary = (f"🏆 海战胜利！坐标({pr['x']},{pr['y']}) 歼灭【{pr['name']}】，"
                        f"缴获 钢{loot['steel']} 资金{loot['money']}。"
-                       f"残敌约 {cfg['pirate']['respawn_war_ticks'] * cfg['tick']['war_min']} 分钟后重整。"
+                       f"残敌约 {_fmt_min(cfg['pirate']['respawn_war_ticks'] * cfg['tick']['war_min'])} 分钟后重整。"
                        + reward_txt
                        + _consequence_text(cons, bside_faction))
     elif result == "defeat":
@@ -749,7 +749,7 @@ def _plunder(conn, cfg, qq: str, afid: int, pr, war_tick: int,
     who = "中立商船" if faction != "empire" else "帝国商船"
     return (f"🏴‍☠️ 破交得手！坐标({pr['x']},{pr['y']}) 洗劫【{pr['name']}】（{who}），"
             f"掠得 资金{gold}" + (f" + {cargo_txt}" if cargo_txt else "") +
-            f"，该航线约 {resp_ticks * cfg['tick']['war_min']} 分钟后恢复。"
+            f"，该航线约 {_fmt_min(resp_ticks * cfg['tick']['war_min'])} 分钟后恢复。"
             + _consequence_text(cons, faction))
 
 
@@ -1220,6 +1220,22 @@ def battle_rng(seed, war_tick: int, round_no: int):
 # 战斗结算一律走下面这几个助手，而不是直接调用全局 random。
 # 这样每轮开始时把 _RNG 切到由战斗种子派生的流，事件流水就能重放。
 _RNG = random          # 默认（战斗外）仍用全局 random
+
+
+def _fmt_min(m) -> str:
+    """把分钟数显示成人话：30.0 -> 30，7.5 -> 7.5，90 -> 1 小时 30 分，1440 -> 1 天。
+
+    与 gov.fmt_mins 保持同一套口径（war_min 现在是 0.5 这样的小数，
+    直接用 f-string 会显示成「30.0 分钟」）。
+    """
+    m = float(m)
+    if m < 60:
+        return f"{m:g}"
+    h, mm = divmod(int(round(m)), 60)
+    if h < 24:
+        return (f"{h} 小时 " + f"{mm} 分") if mm else f"{h} 小时"
+    d, hh = divmod(h, 24)
+    return (f"{d} 天 " + f"{hh} 小时") if hh else f"{d} 天"
 
 
 def _rnd() -> float:

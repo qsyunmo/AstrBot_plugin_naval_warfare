@@ -15,6 +15,7 @@ import time
 
 from . import relations
 
+
 logger = logging.getLogger("naval")
 
 PENDING, ACCEPTED, REJECTED, EXPIRED = "pending", "accepted", "rejected", "expired"
@@ -27,6 +28,18 @@ RES_ZH = {"money": "资金", "steel": "钢材", "oil": "石油", "food": "食物
           "aluminium": "铝材", "rare_earth": "稀土", "chips": "芯片",
           "manpower": "人力", "supply": "补给", "science": "科研点"}
 
+
+
+def _fmt_min(m) -> str:
+    """分钟数 → 人话（与 combat/game 的 _fmt_min 同口径）。"""
+    m = float(m)
+    if m < 60:
+        return f"{m:g} 分钟"
+    h, mm = divmod(int(round(m)), 60)
+    if h < 24:
+        return (f"{h} 小时 " + f"{mm} 分") if mm else f"{h} 小时"
+    d, hh = divmod(h, 24)
+    return (f"{d} 天 " + f"{hh} 小时") if hh else f"{d} 天"
 
 def dcfg(cfg: dict) -> dict:
     return cfg.get("diplomacy") or {}
@@ -369,7 +382,7 @@ def run_spy(conn, cfg, a_qq: str, b_qq: str, op: str):
     if last and int(time.time()) - int(last) < cd_h * 3600:
         left = cd_h * 3600 - (int(time.time()) - int(last))
         return False, (f"⏳ 对该目标的行动还在冷却中（还需 "
-                       f"{left // 3600}h{left % 3600 // 60}m）")
+                       f"{_fmt_min(left / 60)}）")
     conn.execute("UPDATE players SET money=money-?, chips=chips-? WHERE qq=?",
                  (cost_m, cost_c, a_qq))
     spec = ops[op]

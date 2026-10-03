@@ -134,6 +134,38 @@ class Ctx:
     dstore: object = None
 
 
+def _fmt_min(m) -> str:
+    """把分钟数显示成人话：30.0 -> 30，7.5 -> 7.5，90 -> 1 小时 30 分，1440 -> 1 天。
+
+    与 gov.fmt_mins 保持同一套口径（war_min 现在是 0.5 这样的小数，
+    直接用 f-string 会显示成「30.0 分钟」）。
+    """
+    m = float(m)
+    if m < 60:
+        return f"{m:g}"
+    h, mm = divmod(int(round(m)), 60)
+    if h < 24:
+        return (f"{h} 小时 " + f"{mm} 分") if mm else f"{h} 小时"
+    d, hh = divmod(h, 24)
+    return (f"{d} 天 " + f"{hh} 小时") if hh else f"{d} 天"
+
+
+def _fmt_span(m) -> str:
+    """带单位的时长（用于「剩约 X」「工时约 X」这类独立出现的地方）。
+
+    _fmt_min 是裸数字版，单位由句子提供（「残敌约 30 分钟后重整」）；
+    两者用途不同，别混用。
+    """
+    m = float(m)
+    if m < 60:
+        return f"{m:g} 分钟"
+    h, mm = divmod(int(round(m)), 60)
+    if h < 24:
+        return (f"{h} 小时 " + f"{mm} 分") if mm else f"{h} 小时"
+    d, hh = divmod(h, 24)
+    return (f"{d} 天 " + f"{hh} 小时") if hh else f"{d} 天"
+
+
 def _island_name(cfg, itype):
     return cfg["island_types"].get(itype, {}).get("name", itype)
 
@@ -652,7 +684,7 @@ class GameCommands:
             bname = self.cfg["buildings"][q["def_id"]]["name"]
             wait = max(0, q["end_tick"] - econ_tick) * step_min
             lines.append(f"🛠 {bname}Lv{q['target_level']} ({q['x']},{q['y']}) "
-                         f"剩约 {wait//60}h{wait%60}m")
+                         f"剩约 {_fmt_span(wait)}")
         # 研究
         now = time.time()
         for q in self.conn.execute(
@@ -667,7 +699,7 @@ class GameCommands:
                 (ctx.qq,)).fetchall(), 1):
             wait = max(0, q["end_tick"] - econ_tick) * step_min
             lines.append(f"🚢 {q['dn']}×{q['qty']} ({q['x']},{q['y']}) "
-                         f"剩约 {wait//60}h{wait%60}m")
+                         f"剩约 {_fmt_span(wait)}")
         return ("📋 进行中：\n" + "\n".join(lines)) if lines else "📭 所有队列都空着。/nw建造、/nw研究、/nw生产 走起。"
 
     async def ranking(self, ctx: Ctx) -> str:
@@ -1019,7 +1051,7 @@ class GameCommands:
         cname = self.mc["classes"][r["ship_class"]]["name"]
         return (f"📐 {r['name']}　{cname} T{r['tier']}\n配槽：{mods_text}\n"
                 f"{pools.stats_text(stats)}\n单舰造价：{_cost_text(cost)}\n"
-                f"工时约 {mins//60}h{mins%60}m｜/nw生产 {r['name']} <数量>")
+                f"工时约 {_fmt_span(mins)}｜/nw生产 {r['name']} <数量>")
 
     # ---------- P1：船坞排产 ----------
     async def produce(self, ctx: Ctx) -> str:
@@ -1083,7 +1115,7 @@ class GameCommands:
             lines.append("船台空闲。/nw生产 <设计名> <数量>")
         for q in rows:
             wait = max(0, q["end_tick"] - econ_tick) * self.cfg["tick"]["economic_min"]
-            lines.append(f"· {q['dn']}×{q['qty']}　剩约 {wait//60}h{wait%60}m")
+            lines.append(f"· {q['dn']}×{q['qty']}　剩约 {_fmt_span(wait)}")
         # §19.1 舰员经验：把已有舰船的舰员状态一并列出
         from . import crew as _crew
         ships = self.conn.execute(
@@ -2774,7 +2806,7 @@ class GameCommands:
                           (json.dumps({"retreat_since": war_tick}), f["id"]))
         self.conn.commit()
         return (f"↩️【{f['name']}】已下令撤退，将在下一个战争 tick（约 "
-                f"{self.cfg['tick']['war_min']} 分钟）脱离接触。")
+                f"{_fmt_min(self.cfg['tick']['war_min'])} 分钟）脱离接触。")
 
     async def battle_report(self, ctx: Ctx) -> str:
         if not self._player(ctx.qq):
