@@ -229,7 +229,7 @@
   },
   "pirate": {
     "_comment": "P2a 海盗野怪（§25.1 L1~3）。注册时在首都外围生成1据点+1巡逻队",
-    "spawn_min": 22, "spawn_max": 45,
+    "spawn_min": 10, "spawn_max": 16,
     "wander_radius": 10, "flee_dist": 6,
     "respawn_war_ticks": 60,
     "loot": {
@@ -244,10 +244,10 @@
     }
   },
   "fog": {
-    "_comment": "P2b 战争迷雾（§1「仅雷达/巡逻范围可见」）。视野源=己方岛屿/首都/己方舰队，切比雪夫半径；半径务必小于海图默认半径(10)，否则全图皆亮",
+    "_comment": "P2b 战争迷雾（§1「仅雷达/巡逻范围可见」）。视野源=己方岛屿/首都/己方舰队，切比雪夫半径；首都视野要大于海盗刷怪距离(spawn_max)，否则海盗刷出来就被雾挡住看不见",
     "enabled": true,
     "island_vision": 4,
-    "capital_vision": 8,
+    "capital_vision": 22,
     "fleet_vision": 6,
     "always_visible_own": true
   },

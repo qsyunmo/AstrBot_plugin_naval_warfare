@@ -594,7 +594,7 @@ class NavalWeb:
             qq = self._qq_from_request(request)
             if not qq:
                 return err("未登录", 401)
-            d = self._chart_data(qq, max(3, min(30, radius)), (cx, cy))
+            d = self._chart_data(qq, max(3, min(60, radius)), (cx, cy))
             if not d:
                 return err("尚未注册势力", 404)
             return {"ok": True, **d}

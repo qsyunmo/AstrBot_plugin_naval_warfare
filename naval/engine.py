@@ -660,6 +660,13 @@ def settle_war(conn, cfg: dict) -> list:
             "SELECT x,y,owner_qq FROM islands").fetchall()}
 
         fleet.war_tick_move(conn, cfg)
+        # 周期补齐周边 AI 阵营（海盗/商船/帝国商船/协会巡逻/佣兵/正规军/雲墨）。
+        # 这些原本只在注册最后一步调用一次，导致「没走完注册」或「敌人被清光」
+        # 之后再也不会生成。各 ensure_* 自带 want/have 守卫，此处重复调用是幂等的。
+        for _p in conn.execute("SELECT qq,capital_x,capital_y FROM players"
+                               " WHERE capital_x IS NOT NULL").fetchall():
+            aiworld.ensure_all_for(conn, cfg, _p["qq"], _p["capital_x"],
+                                   _p["capital_y"], war_tick)
         # §4 水雷：玩家舰队走位后检查触发（己方雷场不触发）
         for f in conn.execute("SELECT * FROM fleets").fetchall():
             n = fleet.ship_count(conn, f["id"])

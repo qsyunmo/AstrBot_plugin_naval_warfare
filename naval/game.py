@@ -311,7 +311,47 @@ def chart_data(conn, cfg: dict, qq: str, radius: int = 10, center: tuple = None)
     except Exception:
         logger.exception("[海战模拟器] 海图求租借港异常")
         d["leases"] = []
+    # 附近目标（情报）：把视野外但不算太远的 AI 舰队也列出来，供玩家「定位」。
+    # 迷雾仍生效——这里只解决「知道去哪找」，标注是否已探明。
+    try:
+        d["nearby"] = _nearby_targets(conn, cfg, sources, qq, cx, cy)
+    except Exception:
+        logger.exception("[海战模拟器] 海图求附近目标异常")
+        d["nearby"] = []
     return d
+
+
+NEARBY_RANGE = 160          # 「附近目标」的情报半径（格）
+_FACTION_ZH = {"pirate": "海盗", "neutral_merchant": "中立商船",
+               "empire": "帝国商船", "guild": "协会巡逻", "merc": "佣兵",
+               "regular": "正规军", "enforcer": "执法者", "rebel": "叛军",
+               "yunmo": "雲墨"}
+
+
+def _nearby_targets(conn, cfg, sources, qq: str, cx: int, cy: int, limit: int = 14):
+    """以首都为中心、NEARBY_RANGE 格内的 AI 舰队清单（按距离升序）。"""
+    rows = conn.execute(
+        "SELECT x,y,name,faction,level,comp_json FROM ai_fleets"
+        " WHERE x BETWEEN ? AND ? AND y BETWEEN ? AND ?",
+        (max(0, cx - NEARBY_RANGE), min(fleetm.MAP_SIZE - 1, cx + NEARBY_RANGE),
+         max(0, cy - NEARBY_RANGE), min(fleetm.MAP_SIZE - 1, cy + NEARBY_RANGE))
+    ).fetchall()
+    out = []
+    for r in rows:
+        dist = max(abs(r["x"] - cx), abs(r["y"] - cy))     # 切比雪夫，与视野一致
+        comp = json.loads(r["comp_json"] or "[]")
+        out.append({
+            "x": r["x"], "y": r["y"], "name": r["name"],
+            "faction": r["faction"],
+            "faction_zh": _FACTION_ZH.get(r["faction"], r["faction"]),
+            "level": r["level"], "dist": dist,
+            "ships": sum(int(c.get("qty", 0) or 0) for c in comp) if comp else 0,
+            "is_base": not comp,          # comp 为空 = 据点标记，不可攻打
+            "visible": bool(vision.is_visible(sources, r["x"], r["y"]))
+                       if sources is not None else True,
+        })
+    out.sort(key=lambda o: (o["dist"], o["faction"]))
+    return out[:limit]
 
 
 class GameCommands:

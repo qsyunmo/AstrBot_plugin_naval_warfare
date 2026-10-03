@@ -131,7 +131,7 @@
       </div>
       <div class="maptools">
         <span>视野半径</span>
-        <input type="range" id="radius" min="4" max="25" value="10">
+        <input type="range" id="radius" min="4" max="40" value="25">
         <span id="radiusVal">10</span>
         <button class="ghost" id="btnRefreshMap">刷新</button>
         <button class="ghost" id="btnMapReset" style="display:none">↺ 回到首都</button>
@@ -999,7 +999,32 @@ function renderMapEntities(){
     '" data-y="'+w.y+'">派舰队打捞</button></div></div>'));
   (mapData.fleets||[]).forEach(f => parts.push(
     '<div class="item"><b>⛵ '+esc(f.name)+'</b> ('+f.x+','+f.y+')</div>'));
+  // 附近目标（情报）：视野外但不太远的 AI 舰队，点「定位」把海图挪过去
+  const nb = mapData.nearby || [];
+  if (nb.length){
+    parts.push('<div class="item"><b>🎯 附近目标</b>'
+      + '<div class="sub">按距离排序，含视野外的（只报方位，不算已探明）。'
+      + '点「定位」把海图挪过去。</div>'
+      + nb.map(t => {
+          const tag = t.is_base ? '　<span style="color:#7f97ad">据点</span>'
+            : (t.ships ? '　'+t.ships+' 舰' : '');
+          const vis = t.visible ? '' : '　<span style="opacity:.6">未探明</span>';
+          return '<div class="sub">'
+            + (t.faction==='pirate'?'☠ ':t.faction==='yunmo'?'☢️ '
+               :t.faction==='enforcer'?'! ':t.faction==='merc'?'💰 '
+               :t.faction==='regular'?'🏛 ':'· ')
+            + '<b>'+esc(t.faction_zh)+'</b> '+esc(t.name)
+            + '　('+t.x+','+t.y+')　距 '+t.dist+' 格'+tag+vis
+            + '　<button class="ghost" data-locate="'+t.x+','+t.y+'" '
+            + 'data-lname="'+esc(t.faction_zh + ' ' + t.name)+'">定位</button>'
+            + '</div>';
+        }).join('') + '</div>');
+  }
   box.innerHTML = parts.length ? parts.join('') : '<div class="empty">视野内暂无目标。</div>';
+  box.querySelectorAll('button[data-locate]').forEach(b => b.onclick = () => {
+    const xy = b.dataset.locate.split(',');
+    focusOnMap(+xy[0], +xy[1], b.dataset.lname || '目标');
+  });
   box.querySelectorAll('button[data-act=attack]').forEach(b => b.onclick = () => {
     switchTab('cmd'); $('cmd').value = '攻击 ' + (mapData.fleets[0] ? mapData.fleets[0].name : '') +
       ' ' + b.dataset.x + ',' + b.dataset.y; $('cmd').focus();

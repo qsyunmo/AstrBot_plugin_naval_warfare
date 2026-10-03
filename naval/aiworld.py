@@ -7,11 +7,14 @@ ai_fleets 两行/据点：
 海盗用同 T 白色标准模块套，经 pools.ship_preview 算属性。
 """
 import json
+import logging
 import math
 import random
 import time
 
 from . import pools, fleet
+
+_log = logging.getLogger("naval")
 
 CLASS_ZH = {"frigate": "海盗护卫舰", "destroyer": "海盗驱逐舰",
             "light_cruiser": "海盗轻巡", "ss_attack": "海盗潜艇",
@@ -104,6 +107,32 @@ def _in_battle(conn, afid: int):
             (afid,)).fetchall():
         return r["id"]
     return None
+
+
+def ensure_all_for(conn, cfg: dict, qq: str, cx: int, cy: int,
+                   war_tick: int) -> int:
+    """给某个玩家补齐周边的全部 AI 阵营，返回本次新建的条目数。
+
+    这些 ensure_* 原本**只在注册流程的最后一步调用一次**，于是：
+    - 玩家没走完注册（卡在「1 引导 / 2 直接开始」那步）→ 世界永远没有敌人
+    - 敌人被清光后 → 再也不会生成
+    现在由战争 tick 周期性调用补齐。每个 ensure_* 自带 want/have 守卫，
+    重复调用是幂等的，不会刷怪。
+    """
+    made = 0
+    try:
+        if ensure_pirate(conn, cfg, cx, cy, war_tick):
+            made += 1
+        for fn in (ensure_merchants, ensure_empire_merchant, ensure_guild_patrol,
+                   ensure_merc):
+            made += int(fn(conn, cfg, cx, cy, war_tick) or 0)
+        if ensure_regular(conn, cfg, cx, cy, war_tick):
+            made += 1
+        if ensure_yunmo(conn, cfg, cx, cy, war_tick):
+            made += 1
+    except Exception:
+        _log.exception("[海战模拟器] 补齐 AI 阵营异常 qq=%s", qq)
+    return made
 
 
 MERCHANT = "neutral_merchant"
