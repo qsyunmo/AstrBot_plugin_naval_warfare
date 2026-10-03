@@ -56,8 +56,24 @@ def ship_count(conn, fleet_id: int) -> int:
 
 
 def fleet_speed(conn, fleet_id: int) -> int:
-    """编队航速取最慢舰；空编队 0。"""
-    spds = [ship_stats(r).get("speed", 0) for r in fleet_ships(conn, fleet_id)]
+    """编队航速取最慢舰；空编队 0。
+
+    同一 def_id 的舰 stats 完全相同，所以只按 def_id 取一遍再算。
+    关键是**不要 GROUP BY data_json** —— 那是很宽的文本列，
+    一队 24 万艘时逐行哈希它要 0.5 秒。
+    """
+    ids = [r["def_id"] for r in conn.execute(
+        "SELECT DISTINCT def_id FROM ships WHERE fleet_id=?",
+        (fleet_id,)).fetchall()]
+    if not ids:
+        return 0
+    spds = []
+    for did in ids:
+        r = conn.execute(
+            "SELECT data_json FROM ships WHERE fleet_id=? AND def_id=? LIMIT 1",
+            (fleet_id, did)).fetchone()
+        if r is not None:
+            spds.append(ship_stats(r).get("speed", 0))
     return min(spds) if spds else 0
 
 
@@ -197,19 +213,20 @@ def mission_of(fleet_row) -> dict:
 
 
 def is_subs_only(conn, fleet_id: int) -> bool:
-    """舰队是否清一色潜艇（伏击阵位要求，§4「潜艇舰队」）。"""
-    rows = conn.execute("SELECT def_id FROM ships WHERE fleet_id=?", (fleet_id,)).fetchall()
-    if not rows:
+    """舰队是否清一色潜艇（伏击阵位要求，§4「潜艇舰队」）。
+
+    原来是「取全部 def_id 再逐艘查 designs」（N+1）——
+    十万艘编队会做十万次查询。改成一次 JOIN 聚合。
+    """
+    n = conn.execute("SELECT COUNT(*) c FROM ships WHERE fleet_id=?",
+                     (fleet_id,)).fetchone()["c"]
+    if not n:
         return False
-    for r in rows:
-        cls = None
-        if str(r["def_id"]).isdigit():
-            d = conn.execute("SELECT ship_class FROM designs WHERE id=?",
-                             (int(r["def_id"]),)).fetchone()
-            cls = d["ship_class"] if d else None
-        if not str(cls or "").startswith("ss"):
-            return False
-    return True
+    bad = conn.execute(
+        "SELECT COUNT(*) c FROM ships s LEFT JOIN designs d ON d.id=s.def_id"
+        " WHERE s.fleet_id=? AND (d.ship_class IS NULL"
+        " OR d.ship_class NOT LIKE 'ss%')", (fleet_id,)).fetchone()["c"]
+    return int(bad or 0) == 0
 
 
 def latest_origin(conn, qq: str):
@@ -258,12 +275,25 @@ def overview(conn, qq: str) -> dict:
     fleets = []
     for f in list_fleets(conn, qq):
         comp = []
+        # 按 def_id 分组（而不是 name）—— name 不在任何索引里，
+        # 24 万艘时 GROUP BY name 每行都要回表，实测 2 秒以上。
+        # 名字/代际从 designs 查得到。
         for r in conn.execute(
-                "SELECT name, COUNT(*) c FROM ships WHERE qq=? AND fleet_id=?"
-                " GROUP BY name ORDER BY name", (qq, f["id"])).fetchall():
-            cls, tier = _cls_of(conn, qq, r["name"], cache)
-            comp.append({"name": r["name"], "count": r["c"],
-                         "cls": cls, "tier": tier})
+                "SELECT def_id, COUNT(*) c FROM ships WHERE qq=? AND fleet_id=?"
+                " GROUP BY def_id", (qq, f["id"])).fetchall():
+            d = conn.execute("SELECT name,tier FROM designs WHERE id=?",
+                             (r["def_id"],)).fetchone() if str(r["def_id"]).isdigit() else None
+            if d:
+                comp.append({"name": d["name"], "count": r["c"],
+                             "cls": _cls_of(conn, qq, d["name"], cache)[0],
+                             "tier": d["tier"]})
+            else:
+                one = conn.execute(
+                    "SELECT name,tier FROM ships WHERE fleet_id=? AND def_id=? LIMIT 1",
+                    (f["id"], r["def_id"])).fetchone()
+                nm = one["name"] if one else str(r["def_id"])
+                cls, tier = _cls_of(conn, qq, nm, cache)
+                comp.append({"name": nm, "count": r["c"], "cls": cls, "tier": tier})
         fleets.append({
             "id": f["id"], "name": f["name"], "x": f["x"], "y": f["y"],
             "in_battle": bool(in_battle(conn, f["id"])),

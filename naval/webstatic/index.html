@@ -1165,6 +1165,7 @@ function renderDiplo(d){
    批量生产后一次会有几十上百艘，全平铺会刷屏。 */
 const SHIP_FOLD_MIN = 3;     // ≥3 艘同名才折叠，1~2 艘直接平铺
 const SHIP_FOLD_MAX = 40;    // 展开时最多列 40 条，其余只报数量
+const SHIP_PREVIEW_UI = 200;  // 与服务端 SHIP_PREVIEW 对应
 function shipGroups(ships){
   const m = new Map();
   (ships || []).forEach(s => {
@@ -1174,27 +1175,43 @@ function shipGroups(ships){
   });
   return [...m.values()];
 }
-function shipGroupHtml(group){
+function shipGroupHtml(group, total){
   if (!group || !group.length) return '';
-  if (group.length < SHIP_FOLD_MIN) return group.map(shipLine).join('');
+  const n = total || group.length;
+  if (n < SHIP_FOLD_MIN) return group.map(shipLine).join('');
   const s0 = group[0];
   const icon = (s0.cls && String(s0.cls).startsWith('ss')) ? '🦈 ' : '⚓ ';
   const inPort = group.filter(s => !s.fleet_id).length;
   const hpSum = group.reduce((a, s) => a + (s.hp || 0), 0);
   const hpMax = group.reduce((a, s) => a + (s.max_hp || 0), 0);
   const shown = group.slice(0, SHIP_FOLD_MAX).map(shipLine).join('');
-  const more = group.length > SHIP_FOLD_MAX
-    ? '<div class="sub">…还有 ' + (group.length - SHIP_FOLD_MAX) + ' 艘未列出</div>' : '';
-  const state = (inPort === group.length) ? '　（全在港）'
+  const more = n > SHIP_FOLD_MAX
+    ? '<div class="sub">…还有 ' + (n - SHIP_FOLD_MAX) + ' 艘（后端只回前 '
+      + SHIP_PREVIEW_UI + ' 条明细）</div>' : '';
+  const state = (inPort >= n) ? '　（全在港）'
     : (inPort ? '　（' + inPort + ' 艘在港）' : '');
   return '<details style="margin:2px 0"><summary style="cursor:pointer">'
     + icon + esc(s0.name) + ' T' + s0.tier
-    + '　<b>×' + group.length + '</b>'
+    + '　<b>×' + n + '</b>'
     + (hpMax ? '　HP ' + fmt(hpSum) + '/' + fmt(hpMax) : '')
     + state + '　<span style="opacity:.6;font-size:11px">展开</span>'
     + '</summary>' + shown + more + '</details>';
 }
-function shipsFoldHtml(ships){
+function shipsFoldHtml(ships, groups){
+  // 服务端给了聚合分组就直接用 —— 十万艘时后端只回前 200 条逐舰，
+  // 靠前端的 shipGroups() 会算成"×200"而不是真实数量
+  if (groups && groups.length){
+    return groups.map(g => {
+      if (g.count < SHIP_FOLD_MIN){
+        const own = (ships||[]).filter(s => s.name===g.name && s.tier===g.tier);
+        if (own.length) return own.map(shipLine).join('');
+      }
+      const s0 = {name: g.name, tier: g.tier, cls: g.cls,
+                  hp: g.hp, max_hp: g.max_hp, fleet_id: g.in_port < g.count ? 1 : null};
+      return shipGroupHtml([s0, ...Array(Math.max(0, g.count-1)).fill(s0)]
+                           .slice(0, g.count), g.count);
+    }).join('');
+  }
   return shipGroups(ships).map(shipGroupHtml).join('');
 }
 
@@ -1204,10 +1221,11 @@ function renderFleets(d){
   box.innerHTML = d.fleets.map(f => {
     const m = f.mission || {};
     const mv = m.type ? '　任务：'+esc(m.type)+(m.target_x!=null?(' → ('+m.target_x+','+m.target_y+')'):'') : '';
-    const ships = shipsFoldHtml(f.ships || []);
+    const ships = shipsFoldHtml(f.ships || [], f.ship_groups);
+    const fn = f.ship_total != null ? f.ship_total : (f.ships||[]).length;
     return '<div class="item"><b>⛵ '+esc(f.name)+'</b>　('+f.x+','+f.y+')'+
            (f.speed?('　航速 '+f.speed):'')+mv+
-           '<div class="sub">'+((f.ships||[]).length)+' 艘</div>'+ships+'</div>';
+           '<div class="sub">'+fn+' 艘</div>'+ships+'</div>';
   }).join('');
 }
 function renderAssets(d){
@@ -1239,9 +1257,10 @@ function renderAssets(d){
         + '管理此岛</button></div>').join('')
       + '</div>');
   }
+  const shipN = d.ship_total || (d.ships||[]).length;
   out.push('<div class="item"><b>🚢 舰船</b>'
-    + ((d.ships||[]).length ? '　共 '+d.ships.length+' 艘（同型已折叠，点开看逐艘）' : '')
-    + ((d.ships||[]).length ? shipsFoldHtml(d.ships)
+    + (shipN ? '　共 '+shipN+' 艘（同型已折叠，点开看逐艘）' : '')
+    + (shipN ? shipsFoldHtml(d.ships, d.ship_groups)
       : '<div class="sub">暂无</div>') + '</div>');
   // §19.1 指挥官/舰长
   const caps = d.captains || [];

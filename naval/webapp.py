@@ -39,6 +39,8 @@ PUSH_KEEP = 200          # 每个玩家最多保留多少条待取推送
 # 战场「我方逐舰」一次最多回多少条（批量生产后一支舰队可达数千艘，
 # 全塞进 JSON 会让每 5 秒一次的轮询传几百 KB）
 UNIT_PREVIEW = 60
+# 势力页一次最多回多少艘逐舰明细（其余靠 ship_groups 聚合展示）
+SHIP_PREVIEW = 200
 # 战场「本轮流水」一次最多回多少行（大编队一轮能刷出几百行）
 ROUND_PREVIEW = 40
 BODY_LIMIT = 64 * 1024
@@ -644,6 +646,10 @@ class NavalWeb:
             return {"ok": True,
                     "fleets": self._fleets(qq),
                     "ships": self._ships(qq),
+                    "ship_groups": self._ship_groups(qq),
+                    "ship_total": self.conn.execute(
+                        "SELECT COUNT(*) c FROM ships WHERE qq=?", (qq,)
+                    ).fetchone()["c"],
                     "designs": self._designs(qq),
                     "buildings": self._buildings(qq),
                     "queues": self._queues(qq),
@@ -701,29 +707,101 @@ class NavalWeb:
                 mission = json.loads(f["mission"] or "{}")
             except Exception:
                 mission = {}
+            # 只回前 SHIP_PREVIEW 艘 + 聚合分组：单队十万艘时逐艘传 JSON 不现实
             rows = self.conn.execute(
-                "SELECT id,name,tier,hp,max_hp FROM ships WHERE fleet_id=?", (f["id"],)).fetchall()
+                "SELECT id,name,tier,hp,max_hp FROM ships WHERE fleet_id=?"
+                " ORDER BY id LIMIT ?", (f["id"], SHIP_PREVIEW)).fetchall()
+            total = self.conn.execute(
+                "SELECT COUNT(*) c FROM ships WHERE fleet_id=?", (f["id"],)
+            ).fetchone()["c"]
             out.append({
                 "id": f["id"], "name": f["name"], "x": f["x"], "y": f["y"],
                 "mission": mission,
                 "speed": fleetm.fleet_speed(self.conn, f["id"]) if hasattr(fleetm, "fleet_speed") else None,
                 "ships": [dict(r) for r in rows],
+                "ship_total": int(total or 0),
+                "ship_groups": self._ship_groups(qq, f["id"]),
             })
         return out
 
-    def _ships(self, qq: str) -> list:
-        rows = self.conn.execute(
-            "SELECT id,name,tier,hp,max_hp,fleet_id,sub_state,sub_batt,def_id,"
-            "crew_exp,crew_tier FROM ships WHERE qq=? ORDER BY id", (qq,)).fetchall()
+    def _ship_class_map(self) -> dict:
+        """designs.id -> ship_class，一次查完。
+
+        原来是逐舰 `SELECT ship_class FROM designs WHERE id=?`（N+1）——
+        2417 艘就要 2417 次查询、421 ms；批量生产后到十万级会直接把接口拖死。
+        """
+        if getattr(self, "_cls_cache", None) is None:
+            self._cls_cache = {
+                int(r["id"]): r["ship_class"]
+                for r in self.conn.execute("SELECT id,ship_class FROM designs").fetchall()
+            }
+        return self._cls_cache
+
+    def _ship_groups(self, qq: str, fleet_id=None) -> list:
+        """按 舰名+代际+舰级 聚合的舰船统计（前端折叠用）。
+
+        批量生产后单支舰队可能上十万艘，逐艘传 JSON 不现实；
+        聚合结果永远只有几十行。
+
+        只 GROUP BY def_id + fleet_id（两个整数）—— 名字/代际/舰级都能从
+        designs 查到。这样配合 idx_ships_qq_def 是**纯索引扫描**，
+        不用碰很宽的 data_json 与逐行的 name 文本（后者实测要 2 秒）。
+        """
+        clsmap = self._ship_class_map()
+        info = {int(r["id"]): (r["name"], r["tier"], r["ship_class"])
+                for r in self.conn.execute(
+                    "SELECT id,name,tier,ship_class FROM designs").fetchall()}
+        if fleet_id is None:
+            rows = self.conn.execute(
+                "SELECT def_id, fleet_id, COUNT(*) n, COALESCE(SUM(hp),0) hp,"
+                " COALESCE(SUM(max_hp),0) mx FROM ships WHERE qq=?"
+                " GROUP BY def_id, fleet_id", (qq,)).fetchall()
+        else:
+            rows = self.conn.execute(
+                "SELECT def_id, fleet_id, COUNT(*) n, COALESCE(SUM(hp),0) hp,"
+                " COALESCE(SUM(max_hp),0) mx FROM ships WHERE qq=? AND fleet_id=?"
+                " GROUP BY def_id, fleet_id", (qq, fleet_id)).fetchall()
+        agg = {}
+        for r in rows:
+            nm, tier, cls = info.get(int(r["def_id"]),
+                                     (str(r["def_id"]), 0, None)) \
+                if str(r["def_id"]).isdigit() else (str(r["def_id"]), 0, None)
+            # 兜底：designs 里查不到时退回舰上存的名字
+            if nm == str(r["def_id"]):
+                one = self.conn.execute(
+                    "SELECT name,tier FROM ships WHERE qq=? AND def_id=? LIMIT 1",
+                    (qq, r["def_id"])).fetchone()
+                if one:
+                    nm, tier = one["name"], one["tier"]
+            k = (nm, tier, cls)
+            g = agg.setdefault(k, {"name": nm, "tier": tier, "cls": cls,
+                                   "count": 0, "hp": 0, "max_hp": 0, "in_port": 0})
+            g["count"] += int(r["n"] or 0)
+            g["hp"] += float(r["hp"] or 0)
+            g["max_hp"] += float(r["mx"] or 0)
+            if r["fleet_id"] is None:
+                g["in_port"] += int(r["n"] or 0)
+        out = list(agg.values())
+        out.sort(key=lambda g: (-g["count"], g["name"]))
+        return out
+
+    def _ships(self, qq: str, limit: int = SHIP_PREVIEW, fleet_id=None) -> list:
+        clsmap = self._ship_class_map()
+        if fleet_id is None:
+            rows = self.conn.execute(
+                "SELECT id,name,tier,hp,max_hp,fleet_id,sub_state,sub_batt,def_id,"
+                "crew_exp,crew_tier FROM ships WHERE qq=? ORDER BY id LIMIT ?",
+                (qq, limit)).fetchall()
+        else:
+            rows = self.conn.execute(
+                "SELECT id,name,tier,hp,max_hp,fleet_id,sub_state,sub_batt,def_id,"
+                "crew_exp,crew_tier FROM ships WHERE qq=? AND fleet_id=?"
+                " ORDER BY id LIMIT ?", (qq, fleet_id, limit)).fetchall()
         out = []
         for r in rows:
             d = dict(r)
             # 潜艇才需要展示三态；顺带把舰级带给前端做图标
-            cls = None
-            if str(d.get("def_id") or "").isdigit():
-                row = self.conn.execute("SELECT ship_class FROM designs WHERE id=?",
-                                        (int(d["def_id"]),)).fetchone()
-                cls = row["ship_class"] if row else None
+            cls = clsmap.get(int(d["def_id"])) if str(d.get("def_id") or "").isdigit() else None
             d["cls"] = cls
             # §19.1 舰员档位中文名，前端直接用
             d["crew_label"] = CREW_ZH.get(str(d.get("crew_tier") or "recruit"), "")
