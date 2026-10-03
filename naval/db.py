@@ -30,6 +30,13 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if pcols2 and "route_security" not in pcols2:
         conn.execute("ALTER TABLE players ADD COLUMN route_security REAL DEFAULT 100")
 
+    # 当前岛：占岛后 /nw建造、/nw电力 等默认作用在哪座岛上。
+    # NULL = 首都（与旧行为一致，所以老账号不用迁移数据）。
+    if pcols2:
+        for name, decl in (("active_x", "INTEGER"), ("active_y", "INTEGER")):
+            if name not in pcols2:
+                conn.execute(f"ALTER TABLE players ADD COLUMN {name} {decl}")
+
     # §6.2 中立观察国：宣布中立换取不可侵犯（代价是不能主动攻击玩家）
     if pcols2:
         for name, decl in (("is_neutral", "INTEGER DEFAULT 0"),

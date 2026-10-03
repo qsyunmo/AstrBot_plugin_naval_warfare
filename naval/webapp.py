@@ -587,6 +587,37 @@ class NavalWeb:
             return {"ok": True, "text": text,
                     "data": _fm.overview(self.conn, qq)}
 
+        # ---------- 岛屿管理 ----------
+        @app.get("/api/islands")
+        async def islands(request: Request):
+            qq = self._qq_from_request(request)
+            if not qq:
+                return err("未登录", 401)
+            from . import gov as _gov
+
+            mines = _gov.my_islands(self.conn, self.cfg, qq)
+            act = _gov.active_coord(self.conn, qq)
+            return {"ok": True, "islands": mines,
+                    "active": list(act) if act else None,
+                    "count": len(mines)}
+
+        @app.post("/api/island_select")
+        async def island_select(request: Request, payload: dict = Body(...)):
+            qq = self._qq_from_request(request)
+            if not qq:
+                return err("未登录", 401)
+            from . import gov as _gov
+
+            try:
+                x, y = int(payload.get("x")), int(payload.get("y"))
+            except (TypeError, ValueError):
+                return err("需要 x,y")
+            if not _gov.set_active(self.conn, qq, x, y):
+                return err("那不是你的岛")
+            return {"ok": True, "text": f"⭐ 已切换到 ({x},{y})",
+                    "islands": _gov.my_islands(self.conn, self.cfg, qq),
+                    "active": [x, y]}
+
         # ---------- 图形化数据 ----------
         @app.get("/api/map")
         async def map_data(request: Request, radius: int = 10,

@@ -95,17 +95,109 @@ def _short(p, costs: dict):
             for k, v in costs.items() if _val(p, k) < v]
 
 
+# ------------------------------------------------ 岛屿管理（占岛后要能管起来）
+def active_coord(conn, qq: str):
+    """当前岛坐标。players.active_x/y 为空时回落到首都（老账号行为不变）。"""
+    p = conn.execute("SELECT capital_x,capital_y,active_x,active_y FROM players"
+                     " WHERE qq=?", (qq,)).fetchone()
+    if not p or p["capital_x"] is None:
+        return None
+    if p["active_x"] is not None and p["active_y"] is not None:
+        # 当前岛可能已经丢了/被拆了，这时悄悄落回首都，别让玩家卡死在坏状态
+        own = conn.execute("SELECT 1 FROM islands WHERE x=? AND y=? AND owner_qq=?",
+                           (p["active_x"], p["active_y"], qq)).fetchone()
+        if own:
+            return p["active_x"], p["active_y"]
+    return p["capital_x"], p["capital_y"]
+
+
+def set_active(conn, qq: str, x: int, y: int) -> bool:
+    """切换当前岛。必须是自己的岛。"""
+    if not conn.execute("SELECT 1 FROM islands WHERE x=? AND y=? AND owner_qq=?",
+                        (x, y, qq)).fetchone():
+        return False
+    conn.execute("UPDATE players SET active_x=?,active_y=? WHERE qq=?", (x, y, qq))
+    conn.commit()
+    return True
+
+
+def my_islands(conn, cfg: dict, qq: str) -> list:
+    """我的全部岛屿（编号从 1 开始，与 /nw岛 列表一致）。
+
+    含：坐标/岛型/岛级/槽位/控制度/耐久/矿床/建筑明细/是否首都/是否当前岛。
+    """
+    ax = active_coord(conn, qq)
+    p = conn.execute("SELECT capital_x,capital_y FROM players WHERE qq=?",
+                     (qq,)).fetchone()
+    cap = (p["capital_x"], p["capital_y"]) if p else (None, None)
+    rows = conn.execute(
+        "SELECT * FROM islands WHERE owner_qq=? ORDER BY y,x", (qq,)).fetchall()
+
+    out = []
+    for i, isl in enumerate(rows, 1):
+        tdef = cfg["island_types"].get(isl["itype"], {})
+        bs = conn.execute(
+            "SELECT def_id,level FROM buildings WHERE x=? AND y=?"
+            " ORDER BY def_id", (isl["x"], isl["y"])).fetchall()
+        slots_total = int(tdef.get("slots", 0)) + int(isl["dev_level"] or 0)
+        try:
+            ore = json.loads(isl["ore_json"] or "{}")
+        except (ValueError, TypeError):
+            ore = {}
+        d_max = tdef.get("d_max", 0)
+        out.append({
+            "idx": i,
+            "x": isl["x"], "y": isl["y"],
+            "itype": isl["itype"], "type_name": tdef.get("name", isl["itype"]),
+            "dev_level": isl["dev_level"], "d_max": d_max,
+            "slots_used": len(bs), "slots_total": slots_total,
+            "control": isl["control"], "hp": isl["hp"],
+            "ore": ore,
+            "buildings": [{"def_id": b["def_id"], "level": b["level"],
+                           "name": (cfg["buildings"].get(b["def_id"]) or {})
+                                    .get("name", b["def_id"])} for b in bs],
+            "is_capital": (isl["x"], isl["y"]) == cap,
+            "is_active": (isl["x"], isl["y"]) == ax,
+            "can_level_up": bool(d_max and isl["dev_level"] < d_max),
+        })
+    return out
+
+
+def parse_island_ref(conn, cfg: dict, qq: str, raw: str):
+    """解析玩家给的岛指代：`#编号` / 编号 / `@编号` / "x,y"。
+
+    用 `#` 而不是只认 `@`：Router.normalize() 会用 AT_RE 把 `@xxx` 当 QQ
+    at-mention 剥掉（`@2` 会整段消失），`@` 只作为兼容写法保留。
+    返回 (x, y, err)。err 非空表示解析失败。
+    """
+    s = str(raw or "").strip().lstrip("@#").replace("，", ",")
+    if not s:
+        return None, None, "空"
+    mines = my_islands(conn, cfg, qq)
+    if s.isdigit():
+        n = int(s)
+        if 1 <= n <= len(mines):
+            m = mines[n - 1]
+            return m["x"], m["y"], ""
+        return None, None, f"没有编号 {n} 的岛（你共有 {len(mines)} 座）"
+    parts = s.split(",")
+    if len(parts) >= 2 and all(p.strip().lstrip("-").isdigit() for p in parts[:2]):
+        return int(parts[0]), int(parts[1]), ""
+    return None, None, f"看不懂的岛指代「{raw}」（用 #编号 或 x,y）"
+
+
 def build_options(conn, cfg, qq: str, x: int = None, y: int = None) -> dict:
     """某岛的可建/可升级建筑清单（供 Web 图形界面渲染）。
 
     每项含：def_id/name/desc/level/max_lv/next_lv/cost/work/work_min/
     affordable/missing/blocked(不可建原因)/can_build/rush_cost/rush_work_min。
+    x/y 省略时用**当前岛**（不再写死首都 —— 否则占来的岛没法经营）。
     """
     p = conn.execute("SELECT * FROM players WHERE qq=?", (qq,)).fetchone()
     if not p or p["capital_x"] is None:
         return {"ok": False, "reason": "尚未注册"}
     if x is None or y is None:
-        x, y = p["capital_x"], p["capital_y"]
+        x, y = active_coord(conn, qq) or (p["capital_x"], p["capital_y"])
     isl = conn.execute("SELECT * FROM islands WHERE x=? AND y=?",
                        (x, y)).fetchone()
     if not isl:
@@ -177,7 +269,7 @@ def do_build(conn, cfg, qq: str, origin: str, def_id: str,
     if not p or p["capital_x"] is None:
         return False, "❌ 先 /nw注册"
     if x is None or y is None:
-        x, y = p["capital_x"], p["capital_y"]
+        x, y = active_coord(conn, qq) or (p["capital_x"], p["capital_y"])
     isl = conn.execute("SELECT * FROM islands WHERE x=? AND y=?",
                        (x, y)).fetchone()
     if not isl:

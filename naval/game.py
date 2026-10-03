@@ -498,29 +498,62 @@ class GameCommands:
 
     # ---------- 岛屿 ----------
     async def island(self, ctx: Ctx) -> str:
+        """无参数=我的岛屿总览；数字=切换当前岛；x,y=查看该格（不改当前岛）。"""
         p = self._player(ctx.qq)
         if not p:
             return "❌ 先 /nw注册"
-        x, y = p["capital_x"], p["capital_y"]
-        if ctx.args:
-            try:
-                x, y = [int(v) for v in ctx.args[0].replace("，", ",").split(",")[:2]]
-            except ValueError:
-                return "❌ 坐标格式示例：/nw岛 234,567"
-        isl = self.conn.execute("SELECT * FROM islands WHERE x=? AND y=?", (x, y)).fetchone()
+        from . import gov as _gov
+
+        # 无参数：列出全部岛屿，并标出当前岛
+        if not ctx.args:
+            mines = _gov.my_islands(self.conn, self.cfg, ctx.qq)
+            if not mines:
+                return "🌊 你还没有任何岛屿"
+            lines = [f"🏝 我的岛屿（共 {len(mines)} 座，⭐=当前岛）"]
+            for m in mines:
+                star = "⭐" if m["is_active"] else "　"
+                cap = "　🏛首都" if m["is_capital"] else ""
+                lines.append(
+                    f"{star}#{m['idx']} ({m['x']},{m['y']}) {m['type_name']}"
+                    f"　D{m['dev_level']}/{m['d_max']}"
+                    f"　槽{m['slots_used']}/{m['slots_total']}"
+                    f"　控制{m['control']:.0f}%{cap}")
+            lines.append("查看/切换：/nw岛 <编号>　按坐标看：/nw岛 x,y")
+            return "\n".join(lines)
+
+        raw = ctx.args[0]
+        # 纯数字 = 编号（切换当前岛）；含逗号 = 坐标（只看不改）
+        if raw.lstrip("@").isdigit():
+            x, y, err = _gov.parse_island_ref(self.conn, self.cfg, ctx.qq, raw)
+            if err:
+                return f"❌ {err}"
+            _gov.set_active(self.conn, ctx.qq, x, y)
+            switched = True
+        else:
+            x, y, err = _gov.parse_island_ref(self.conn, self.cfg, ctx.qq, raw)
+            if err:
+                return f"❌ {err}　坐标格式示例：/nw岛 234,567"
+            switched = False
+
+        isl = self.conn.execute("SELECT * FROM islands WHERE x=? AND y=?",
+                                (x, y)).fetchone()
         if not isl:
             return f"🌊 ({x},{y}) 是未占领海域（未侦察，无建筑）"
         tdef = self.cfg["island_types"][isl["itype"]]
         ore = json.loads(isl["ore_json"])
-        bs = self.conn.execute("SELECT * FROM buildings WHERE x=? AND y=?", (x, y)).fetchall()
+        bs = self.conn.execute("SELECT * FROM buildings WHERE x=? AND y=?",
+                               (x, y)).fetchall()
         used = len(bs)
         owner = isl["owner_qq"] or "中立"
-        lines = [f"🏝 ({x},{y}) {_island_name(self.cfg, isl['itype'])}　归属:{owner}",
+        lines = [f"🏝 ({x},{y}) {_island_name(self.cfg, isl['itype'])}　归属:{owner}"
+                 + ("　⭐已切换为当前岛" if switched else ""),
                  f"D{isl['dev_level']}/{tdef['d_max']}　槽位 {used}/{tdef['slots']+isl['dev_level']}"
                  f"　控制 {isl['control']:.0f}%　耐久 {isl['hp']:.0f}",
                  f"资源：{_ore_text(ore)}",
                  "建筑：" + ("、".join(f"{self.cfg['buildings'][b['def_id']]['name']}Lv{b['level']}"
                                       for b in bs if b["def_id"] in self.cfg["buildings"]) or "无")]
+        if isl["owner_qq"] == ctx.qq:
+            lines.append("/nw建造 <建筑> 会在当前岛施工（加 #编号 可指定别的岛）")
         return "\n".join(lines)
 
     # ---------- 建造 ----------
@@ -534,16 +567,34 @@ class GameCommands:
         if not p:
             return "❌ 先 /nw注册"
         if not ctx.args:
-            return "用法：/nw建造 建筑名（默认在首都）。可建：" + "、".join(
-                d["name"] for d in self.cfg["buildings"].values())
-        bname = ctx.args[0]
+            return ("用法：/nw建造 建筑名 [#编号]（默认在当前岛，先用 /nw岛 选岛）。可建："
+                    + "、".join(d["name"] for d in self.cfg["buildings"].values()))
+        from . import gov as _gov
+        # 末尾的 #编号 / x,y 指定在别的岛上施工（不改当前岛）。
+        # 注意：别用 @ 开头——Router.normalize 会把 @xxx 当 QQ at-mention 整段剥掉。
+        args = list(ctx.args)
+        x = y = None
+        if len(args) > 1:
+            ref = args[-1]
+            if ref[:1] in ("#", "@") or "," in ref or "，" in ref:
+                rx, ry, err = _gov.parse_island_ref(self.conn, self.cfg, ctx.qq, ref)
+                if err:
+                    return f"❌ {err}"
+                x, y = rx, ry
+                args = args[:-1]
+        bname = " ".join(args).strip()
         def_id = next((k for k, d in self.cfg["buildings"].items() if d["name"] == bname), None)
         if not def_id:
             return f"❌ 没有【{bname}】。可建：" + "、".join(
                 d["name"] for d in self.cfg["buildings"].values())
         bdef = self.cfg["buildings"][def_id]
-        x, y = p["capital_x"], p["capital_y"]
+        if x is None or y is None:
+            x, y = _gov.active_coord(self.conn, ctx.qq) or (p["capital_x"], p["capital_y"])
         isl = self.conn.execute("SELECT * FROM islands WHERE x=? AND y=?", (x, y)).fetchone()
+        if not isl:
+            return f"❌ ({x},{y}) 没有岛屿"
+        if isl["owner_qq"] != ctx.qq:
+            return f"❌ ({x},{y}) 不是你的岛（当前岛用 /nw岛 切换）"
         tdef = self.cfg["island_types"][isl["itype"]]
         ore = json.loads(isl["ore_json"])
 

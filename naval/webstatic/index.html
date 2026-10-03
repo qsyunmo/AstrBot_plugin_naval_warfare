@@ -517,11 +517,13 @@ async function loadBuild(){
   const box = $('buildList');
   box.innerHTML = '<div class="empty">载入中…</div>';
   try {
+    const il = await loadIslands();
     let url = '/api/build_options';
+    // 不带参数时服务端返回的是「当前岛」——不要再拿旧 buildIsland 去覆盖它
     if (buildIsland) url += '?x=' + buildIsland[0] + '&y=' + buildIsland[1];
     const d = await api(url);
     buildData = d;
-    if (!buildIsland) buildIsland = [d.x, d.y];
+    buildIsland = [d.x, d.y];
     renderBuild(d);
   } catch(e){
     box.innerHTML = '<div class="empty">建造面板加载失败：'+esc(e.message)+'</div>';
@@ -530,9 +532,25 @@ async function loadBuild(){
 function renderBuild(d){
   const box = $('buildList');
   const out = [];
+  // 选岛器：占来的岛也要能经营（原先 buildIsland 只在首帧初始化一次，锁死首都）
+  const mines = window._myIslands || [];
+  const opts = mines.map(m =>
+    '<option value="'+m.x+','+m.y+'"'
+    + ((m.x === d.x && m.y === d.y) ? ' selected' : '') + '>'
+    + '#'+m.idx+' ('+m.x+','+m.y+') '+esc(m.type_name)
+    + ' D'+m.dev_level+'/D'+m.d_max
+    + (m.is_capital ? ' 🏛首都' : '')
+    + (m.is_active ? ' ⭐当前' : '') + '</option>').join('');
   out.push('<div class="item"><b>🏗 '+esc(d.island)+' ('+d.x+','+d.y+')</b>'
     + '　岛级 D'+d.dev_level
     + '　槽位 <b>'+d.slots_used+'/'+d.slots_total+'</b>'
+    + (opts ? '<div class="sub" style="margin-top:5px">岛屿：'
+        + '<select id="buildIslandSel" style="padding:4px;border-radius:4px;'
+        + 'border:1px solid #2a3d4d;background:#0d1a24;color:#dfe9f3">'
+        + opts + '</select>　<button class="ghost" id="buildIslandGo">'
+        + '切换到此岛</button>'
+        + '　<span style="opacity:.7">切换后本页与 /nw建造 都作用在该岛</span>'
+        + '</div>' : '')
     + '<div class="sub">点「建造」下单；赶时间可点「⚡加急」多花资源立即完成'
     + '（本服加急倍率 ×'+d.rush_mult+'）</div></div>');
   // 分两组：可建 / 不可建
@@ -584,7 +602,27 @@ function renderBuild(d){
   box.querySelectorAll('button[data-b]').forEach(btn => {
     btn.onclick = () => doBuild(btn.dataset.b, btn.dataset.r === '1');
   });
+  const sel = $('buildIslandSel'), go = $('buildIslandGo');
+  if (sel && go) go.onclick = async () => {
+    const xy = sel.value.split(',');
+    try {
+      const r = await api('/api/island_select', {method:'POST',
+        body: JSON.stringify({x: +xy[0], y: +xy[1]})});
+      window._myIslands = r.islands || [];
+      buildIsland = [+xy[0], +xy[1]];
+      say(r.text || '已切换', 'ok');
+      await loadBuild();
+      loadAssets();
+    } catch(e){ say('切换岛屿失败：'+e.message, 'err'); }
+  };
   loadQueues();
+}
+async function loadIslands(){
+  try {
+    const d = await api('/api/islands');
+    window._myIslands = d.islands || [];
+    return d;
+  } catch(e){ window._myIslands = []; return {islands: []}; }
 }
 async function doBuild(defId, rush){
   const b = (buildData.buildings || []).find(x => x.def_id === defId);
@@ -1037,6 +1075,7 @@ function renderMapEntities(){
 
 /* ---------- 舰队 / 势力 ---------- */
 async function loadAssets(){
+  await loadIslands();
   try {
     const d = await api('/api/assets');
     renderFleets(d);
@@ -1180,6 +1219,25 @@ function renderAssets(d){
     ((d.designs||[]).length ? (d.designs||[]).map(x =>
       '<div class="sub">'+esc(x.name)+'　'+esc(x.ship_class)+' T'+x.tier+'</div>').join('')
       : '<div class="sub">暂无，用 <code>设计</code> 进入设计模式</div>') + '</div>');
+  // 我的岛屿：占来的岛要能一眼看到、并能跳去建造
+  const mines = window._myIslands || [];
+  if (mines.length){
+    out.push('<div class="item"><b>🏝 我的岛屿</b>　共 '+mines.length+' 座'
+      + '<div class="sub">同编号与 /nw岛 一致；点「管理」切到该岛并跳到建造页</div>'
+      + mines.map(m =>
+        '<div class="sub" style="padding:4px 0;border-top:1px solid #1b2733">'
+        + (m.is_active ? '⭐' : '　')
+        + '<b>#'+m.idx+'</b> ('+m.x+','+m.y+') '+esc(m.type_name)
+        + (m.is_capital ? '　🏛首都' : '')
+        + '<br>　D'+m.dev_level+'/D'+m.d_max
+        + '　槽位 '+m.slots_used+'/'+m.slots_total
+        + '　控制 '+Math.round(m.control)+'%　耐久 '+Math.round(m.hp)
+        + '<br>　矿床 '+esc(Object.entries(m.ore||{}).map(([k,v])=>k+v).join(' ') || '无')
+        + '<br>　建筑 '+esc((m.buildings||[]).map(b=>b.name+'Lv'+b.level).join('、') || '无')
+        + '<br>　<button class="ghost" data-misl="'+m.x+','+m.y+'">'
+        + '管理此岛</button></div>').join('')
+      + '</div>');
+  }
   out.push('<div class="item"><b>🚢 舰船</b>'
     + ((d.ships||[]).length ? '　共 '+d.ships.length+' 艘（同型已折叠，点开看逐艘）' : '')
     + ((d.ships||[]).length ? shipsFoldHtml(d.ships)
@@ -1205,6 +1263,20 @@ function renderAssets(d){
     '<div class="sub">'+l+'：'+((q[k]||[]).length)+' 项</div>').join('');
   out.push('<div class="item"><b>⏳ 队列</b>'+ql+'</div>');
   $('assetList').innerHTML = out.join('');
+  // 岛屿卡片上的「管理此岛」：切当前岛 + 跳建造页
+  const abox = $('assetList');
+  abox.querySelectorAll('button[data-misl]').forEach(b => b.onclick = async () => {
+    const xy = b.dataset.misl.split(',');
+    try {
+      const r = await api('/api/island_select', {method:'POST',
+        body: JSON.stringify({x: +xy[0], y: +xy[1]})});
+      window._myIslands = r.islands || [];
+      buildIsland = [+xy[0], +xy[1]];
+      say(r.text || '已切换', 'ok');
+      switchTab('build');
+      await loadBuild();
+    } catch(e){ say('切换岛屿失败：'+e.message, 'err'); }
+  });
 }
 
 /* ---------- 🎬 战报回放 ---------- */
