@@ -2657,6 +2657,16 @@
      "detect": 3,
      "hit": 1
     }
+   },
+   {
+    "key": "hull_gold",
+    "slot": "hull",
+    "rarity": "gold",
+    "name": "传奇船体",
+    "stats": {
+     "hp": 1.8,
+     "spd": -2
+    }
    }
   ],
   "landing": [
@@ -2783,6 +2793,16 @@
     "stats": {
      "cargo": 14,
      "hp": 1.1
+    }
+   },
+   {
+    "key": "hull_gold",
+    "slot": "hull",
+    "rarity": "gold",
+    "name": "传奇船体",
+    "stats": {
+     "hp": 1.8,
+     "spd": -2
     }
    }
   ],
@@ -4111,6 +4131,16 @@
     "stats": {
      "aa": 14
     }
+   },
+   {
+    "key": "hull_gold",
+    "slot": "hull",
+    "rarity": "gold",
+    "name": "传奇船体",
+    "stats": {
+     "hp": 1.8,
+     "spd": -2
+    }
    }
   ],
   "minesweeper": [
@@ -4263,6 +4293,16 @@
     "name": "近防炮",
     "stats": {
      "aa": 14
+    }
+   },
+   {
+    "key": "hull_gold",
+    "slot": "hull",
+    "rarity": "gold",
+    "name": "传奇船体",
+    "stats": {
+     "hp": 1.8,
+     "spd": -2
     }
    }
   ],
@@ -4447,6 +4487,16 @@
     "stats": {
      "aa": 14
     }
+   },
+   {
+    "key": "hull_gold",
+    "slot": "hull",
+    "rarity": "gold",
+    "name": "传奇船体",
+    "stats": {
+     "hp": 1.8,
+     "spd": -2
+    }
    }
   ],
   "torpedo_boat": [
@@ -4590,6 +4640,16 @@
     "name": "近防炮",
     "stats": {
      "aa": 14
+    }
+   },
+   {
+    "key": "hull_gold",
+    "slot": "hull",
+    "rarity": "gold",
+    "name": "传奇船体",
+    "stats": {
+     "hp": 1.8,
+     "spd": -2
     }
    }
   ],
@@ -4746,6 +4806,16 @@
     "stats": {
      "aa": 14
     }
+   },
+   {
+    "key": "hull_gold",
+    "slot": "hull",
+    "rarity": "gold",
+    "name": "传奇船体",
+    "stats": {
+     "hp": 1.8,
+     "spd": -2
+    }
    }
   ],
   "supply_ship": [
@@ -4900,6 +4970,16 @@
     "stats": {
      "aa": 14
     }
+   },
+   {
+    "key": "hull_gold",
+    "slot": "hull",
+    "rarity": "gold",
+    "name": "传奇船体",
+    "stats": {
+     "hp": 1.8,
+     "spd": -2
+    }
    }
   ],
   "hospital_ship": [
@@ -5026,6 +5106,16 @@
     "stats": {
      "cargo": 14,
      "hp": 1.1
+    }
+   },
+   {
+    "key": "hull_gold",
+    "slot": "hull",
+    "rarity": "gold",
+    "name": "传奇船体",
+    "stats": {
+     "hp": 1.8,
+     "spd": -2
     }
    }
   ],
@@ -5182,6 +5272,16 @@
     "stats": {
      "detect": 12,
      "hit": 2
+    }
+   },
+   {
+    "key": "hull_gold",
+    "slot": "hull",
+    "rarity": "gold",
+    "name": "传奇船体",
+    "stats": {
+     "hp": 1.8,
+     "spd": -2
     }
    }
   ],
