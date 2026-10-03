@@ -484,6 +484,40 @@ class NavalWeb:
             return {"ok": True, "text": text,
                     "status": _sb.status(self.conn, self.cfg, qq)}
 
+        @app.get("/api/capital")
+        async def capital_status(request: Request):
+            qq = self._qq_from_request(request)
+            if not qq:
+                return err("未登录", 401)
+            from . import capital as _cap
+
+            return _cap.status(self.conn, self.cfg, qq)
+
+        @app.post("/api/capital")
+        async def capital_act(request: Request, payload: dict = Body(...)):
+            qq = self._qq_from_request(request)
+            if not qq:
+                return err("未登录", 401)
+            from . import capital as _cap
+            from . import research as _rs
+
+            what = str(payload.get("what", "")).lower()
+            if what in ("upgrade", "升级", "扩编"):
+                ok, text = _cap.upgrade_quota(self.conn, self.cfg, qq)
+            elif what in ("apply", "申请"):
+                academy = max([_rs.building_level(self.conn, r["x"], r["y"],
+                                                  "naval_academy")
+                               for r in self.conn.execute(
+                                   "SELECT x,y FROM islands WHERE owner_qq=?",
+                                   (qq,)).fetchall()] or [0])
+                ok, text = _cap.apply_permit(self.conn, self.cfg, qq, academy)
+            else:
+                return err("what 应为 apply 或 upgrade")
+            if not ok:
+                return err(text.lstrip("❌ "))
+            return {"ok": True, "text": text,
+                    "status": _cap.status(self.conn, self.cfg, qq)}
+
         # ---------- 图形化数据 ----------
         @app.get("/api/map")
         async def map_data(request: Request, radius: int = 10,

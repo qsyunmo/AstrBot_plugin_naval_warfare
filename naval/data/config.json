@@ -5,8 +5,8 @@
     "enabled": true,
     "qqs": ["2243683821"],
     "_qqs": "允许使用「nw沙盒」的 QQ 列表。留空 = 全服禁用（宁可误关不可误开）——部署到公开服务器时请清空本列表",
-    "resource_topup": 999999999,
-    "_topup": "「资源拉满」把 11 种资源都设成这个值。仓库容量目前是占位（未实装），不会被削",
+    "resource_topup": 999999999999,
+    "_topup": "「资源拉满」把 11 种资源都设成这个值。仓库容量目前是占位（未实装），不会被削。定这个量级是为了够把服役配额升满（升级链合计约 5.56e10）",
     "command": true,
     "_command": "是否允许通过 QQ 指令使用；Web 端由同样的白名单校验"
   },
@@ -21,9 +21,18 @@
     "permit_requires": {"naval_academy": 2},
     "_requires": "通过法案的建筑门槛：需海军学院 Lv2",
     "quota": 6,
-    "_quota": "无条约时同时在役主力舰上限",
+    "_quota": "无条约时的基础服役配额（未升级）",
     "quota_with_treaty": 3,
-    "_treaty": "全服《海军条约》生效时收紧到的配额（meta.naval_treaty_active=1）"
+    "_treaty": "全服《海军条约》生效时收紧到的基础配额（同样随升级增加）",
+    "quota_upgrade": {
+      "_comment": "服役配额可以花钱升级：每级 +quota_per_upgrade，费用每级 ×cost_mult，升满 max_level 级后变成无限",
+      "base_cost_money": 5000,
+      "_base_cost": "第 1 次升级的费用；第 n 次 = base_cost × cost_mult^(n-1)",
+      "cost_mult": 10,
+      "quota_per_upgrade": 2,
+      "max_level": 8,
+      "_max": "升到第 8 级后配额无限（不再受条约限制）"
+    }
   },
   "world": { "map_size": 1000, "seed": 20261001 },
   "tick": {

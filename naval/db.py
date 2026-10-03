@@ -39,8 +39,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
 
     # 主力舰法案许可（§19.17/§14）：0=未通过法案，1=已获许可
     pcols3 = {r[1] for r in conn.execute("PRAGMA table_info(players)").fetchall()}
-    if pcols3 and "capital_permit" not in pcols3:
-        conn.execute("ALTER TABLE players ADD COLUMN capital_permit INTEGER DEFAULT 0")
+    if pcols3:
+        for name, decl in (("capital_permit", "INTEGER DEFAULT 0"),
+                           ("capital_quota_lv", "INTEGER DEFAULT 0")):
+            if name not in pcols3:
+                conn.execute(f"ALTER TABLE players ADD COLUMN {name} {decl}")
 
     # P2b §25.3/§26.1 通缉热度（独立于恶名，对 empire）：0~100，2/日衰减
     pcols3 = {r[1] for r in conn.execute("PRAGMA table_info(players)").fetchall()}

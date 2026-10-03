@@ -567,6 +567,9 @@ class GameCommands:
             return "❌ 先 /nw注册"
         sub = (ctx.args[0] if ctx.args else "").lower()
         st = _cap.status(self.conn, self.cfg, ctx.qq)
+        if sub in ("升级", "扩编", "扩容", "upgrade"):
+            ok, text = _cap.upgrade_quota(self.conn, self.cfg, ctx.qq)
+            return text
         if sub in ("申请", "通过", "apply"):
             # 海军学院可能在任意一座自己的岛上，取最高等级
             academy = max([research.building_level(self.conn, r["x"], r["y"],
@@ -578,10 +581,12 @@ class GameCommands:
             return text
         cls_zh = "、".join(self.mc["classes"].get(c, {}).get("name", c)
                           for c in st["classes"])
+        quota_txt = "无限" if st["unlimited"] else f"{st['in_service']}/{st['quota']}"
         lines = [
             "🏛 主力舰法案与服役配额",
             f"　许可：{'✅ 已通过' if st['has_permit'] else '❌ 尚未通过'}",
-            f"　配额：{st['in_service']}/{st['quota']}"
+            f"　配额：{quota_txt}"
+            f"（升级 {st['level']}/{st['max_level']} 级）"
             + ("　（全服《海军条约》生效中，配额已收紧）" if st["treaty"] else ""),
             f"　受管舰种：{cls_zh}",
         ]
@@ -591,9 +596,16 @@ class GameCommands:
                              for k, v in req.items()) or "无"
             lines.append(f"　通过法案需：资金 {st['permit_money']}　建筑门槛 {need}")
             lines.append("　→ /nw法案 申请")
+        elif st["unlimited"]:
+            lines.append("　配额无限，主力舰随便造")
         else:
             lines.append(f"　还可再造 {st['remaining']} 艘主力舰")
-        lines.append("　（主力舰＝有蓝图也不够，必须先过法案；配额满了要等损失或退役）")
+            if st["next_cost"] is not None:
+                lines.append(f"　→ /nw法案 升级：第 {st['level']+1} 级花 "
+                             f"{st['next_cost']:,} 资金，配额 +{st['per_upgrade']}"
+                             f"（费用每级 ×{int((self.cfg.get('capital') or {}).get('quota_upgrade', {}).get('cost_mult', 10))}）")
+                lines.append(f"　　（升满 {st['max_level']} 级后配额无限）")
+        lines.append("　（主力舰＝有蓝图也不够，必须先过法案；配额满了可花钱扩编）")
         return "\n".join(lines)
 
     async def sandbox_cmd(self, ctx: Ctx) -> str:

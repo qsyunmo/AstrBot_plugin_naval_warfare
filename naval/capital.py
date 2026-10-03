@@ -15,6 +15,8 @@ import time
 from .db import meta_get, meta_set
 
 TREATY_META_KEY = "naval_treaty_active"
+# 升满配额后的「无限」哨兵值（用 is_unlimited() 判断，别直接比大小）
+UNLIMITED = 10 ** 9
 
 
 def ccfg(cfg: dict) -> dict:
@@ -37,11 +39,84 @@ def active_treaty(conn) -> bool:
         return False
 
 
-def quota_for(conn, cfg: dict) -> int:
+# ------------------------------------------------ 服役配额升级
+def up_cfg(cfg: dict) -> dict:
+    return ccfg(cfg).get("quota_upgrade") or {}
+
+
+def max_level(cfg: dict) -> int:
+    return int(up_cfg(cfg).get("max_level", 8))
+
+
+def per_upgrade(cfg: dict) -> int:
+    return int(up_cfg(cfg).get("quota_per_upgrade", 2))
+
+
+def quota_level(conn, qq: str) -> int:
+    r = conn.execute("SELECT capital_quota_lv FROM players WHERE qq=?",
+                     (qq,)).fetchone()
+    return int((r["capital_quota_lv"] if r and r["capital_quota_lv"] else 0) or 0)
+
+
+def is_unlimited(conn, cfg: dict, qq: str) -> bool:
+    """升满后配额无限（也不受条约限制）。"""
+    return quota_level(conn, qq) >= max_level(cfg)
+
+
+def next_upgrade_cost(cfg: dict, lv: int):
+    """第 lv+1 次升级的费用。lv >= max_level 时返回 None（已满）。"""
+    if lv >= max_level(cfg):
+        return None
+    base = int(up_cfg(cfg).get("base_cost_money", 5000))
+    mult = int(up_cfg(cfg).get("cost_mult", 10))
+    return base * (mult ** lv)
+
+
+def quota_for(conn, cfg: dict, qq: str = None) -> int:
+    """当前服役配额。升满返回无限大哨兵值（配 is_unlimited 判断）。
+
+    注意：配额现在是**按玩家**算的（升级只影响自己），不再只看服务端配置。
+    """
     c = ccfg(cfg)
+    if qq is None:
+        base = int(c.get("quota", 4))
+        return base
+    lv = quota_level(conn, qq)
+    if lv >= max_level(cfg):
+        return UNLIMITED
     if active_treaty(conn):
-        return int(c.get("quota_with_treaty", c.get("quota", 4)))
-    return int(c.get("quota", 4))
+        return int(c.get("quota_with_treaty", 3)) + lv * per_upgrade(cfg)
+    return int(c.get("quota", 4)) + lv * per_upgrade(cfg)
+
+
+def upgrade_quota(conn, cfg: dict, qq: str):
+    """花钱提升服役配额。返回 (ok, text)。"""
+    if not ccfg(cfg).get("enabled", True):
+        return False, "❌ 本服未开启主力舰限制"
+    if not has_permit(conn, qq):
+        return False, "❌ 先通过法案（/nw法案 申请）才能扩编服役配额"
+    lv = quota_level(conn, qq)
+    mx = max_level(cfg)
+    if lv >= mx:
+        return False, f"❌ 服役配额已升满 {mx} 级，当前为**无限**"
+    cost = next_upgrade_cost(cfg, lv)
+    p = conn.execute("SELECT money,name FROM players WHERE qq=?", (qq,)).fetchone()
+    if p is None:
+        return False, "❌ 先 /nw注册"
+    have = float(p["money"] or 0)
+    if have < cost:
+        return False, (f"❌ 资金不足：第 {lv+1} 次扩编需 {cost:,}，"
+                       f"现有 {have:,.0f}")
+    conn.execute("UPDATE players SET capital_quota_lv=capital_quota_lv+1,"
+                 " money=COALESCE(money,0)-? WHERE qq=?", (cost, qq))
+    conn.commit()
+    newlv = lv + 1
+    q = quota_for(conn, cfg, qq)
+    nxt = next_upgrade_cost(cfg, newlv)
+    tail = ("　已达上限，配额**无限**！" if q >= UNLIMITED
+            else f"　配额 {q} 艘　下次扩编 {nxt:,} 资金")
+    return True, (f"⚓ 服役配额已扩编至第 {newlv}/{mx} 级"
+                  f"（耗资 {cost:,}）。{tail}")
 
 
 def in_service(conn, cfg: dict, qq: str) -> int:
@@ -70,10 +145,16 @@ def has_permit(conn, qq: str) -> bool:
 
 
 def status(conn, cfg: dict, qq: str) -> dict:
-    q = quota_for(conn, cfg)
+    q = quota_for(conn, cfg, qq)
     n = in_service(conn, cfg, qq)
+    lv = quota_level(conn, qq)
+    unlimited = q >= UNLIMITED
     return {"ok": True, "has_permit": has_permit(conn, qq),
-            "quota": q, "in_service": n, "remaining": max(0, q - n),
+            "quota": q, "in_service": n,
+            "remaining": (UNLIMITED if unlimited else max(0, q - n)),
+            "unlimited": unlimited, "level": lv, "max_level": max_level(cfg),
+            "per_upgrade": per_upgrade(cfg),
+            "next_cost": next_upgrade_cost(cfg, lv),
             "treaty": active_treaty(conn),
             "classes": sorted(capital_classes(cfg)),
             "permit_money": int(ccfg(cfg).get("permit_cost_money", 50000)),
@@ -89,12 +170,12 @@ def check_build(conn, cfg: dict, qq: str, cls: str):
     if not has_permit(conn, qq):
         return False, ("❌ 主力舰需**法案许可**：你先要通过法案"
                        "（/nw法案 申请，需资金与海军学院等级）")
-    q = quota_for(conn, cfg)
+    q = quota_for(conn, cfg, qq)
     n = in_service(conn, cfg, qq)
     if n >= q:
         tip = "（全服《海军条约》生效中，配额已收紧）" if active_treaty(conn) else ""
         return False, (f"❌ 主力舰已达**服役配额**上限 {n}/{q}{tip}。"
-                       f"退役或损失后才能再造")
+                       f"可 /nw法案 升级 花钱扩编，或等损失/退役")
     return True, ""
 
 
@@ -118,18 +199,26 @@ def apply_permit(conn, cfg: dict, qq: str, academy_lv: int):
     conn.execute("UPDATE players SET money=COALESCE(money,0)-?, capital_permit=1"
                  " WHERE qq=?", (need_money, qq))
     conn.commit()
-    q = quota_for(conn, cfg)
+    q = quota_for(conn, cfg, qq)
     from . import pools as _pools
     zh = "、".join(_pools.mod_data()["classes"].get(c, {}).get("name", c)
                    for c in sorted(capital_classes(cfg)))
+    nxt = next_upgrade_cost(cfg, 0)
     return True, (f"🏛 法案通过！【{p['name']}】获得主力舰建造许可"
                   f"（耗资 {need_money}）。\n"
                   f"　服役配额 {q} 艘，当前在役 {in_service(conn, cfg, qq)} 艘。\n"
-                  f"　可造：{zh}")
+                  f"　可造：{zh}\n"
+                  f"　配额不够可 /nw法案 升级 扩编（第 1 次 {nxt:,} 资金，"
+                  f"每次 ×{int(up_cfg(cfg).get('cost_mult', 10))}，"
+                  f"升满 {max_level(cfg)} 级后无限）")
 
 
 def toggle_treaty(conn, cfg: dict, on: bool):
-    """开关全服《海军条约》（收紧配额）——沙盒/GM 用。"""
+    """开关全服《海军条约》（收紧配额）——沙盒/GM 用。
+
+    返回「未升级玩家的基础配额」，便于调用方观察条约影响。
+    """
     meta_set(conn, TREATY_META_KEY, "1" if on else "0")
     conn.commit()
-    return quota_for(conn, cfg)
+    c = ccfg(cfg)
+    return (int(c.get("quota_with_treaty", 3)) if on else int(c.get("quota", 4)))
