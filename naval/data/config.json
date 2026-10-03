@@ -10,6 +10,21 @@
     "command": true,
     "_command": "是否允许通过 QQ 指令使用；Web 端由同样的白名单校验"
   },
+  "capital": {
+    "_comment": "主力舰限制（设计文档 §19.17 第 50 行 / §14 第 358 行：「战列/战巡/航母另需法案许可 + 条约配额」）",
+    "enabled": true,
+    "classes": ["battleship", "battlecruiser", "cv", "escort_cv", "helicopter_cv",
+                "aviation_battleship", "submarine_cv"],
+    "_classes": "受配额限制的舰种（主力舰）",
+    "permit_cost_money": 50000,
+    "_permit": "通过法案所需资金",
+    "permit_requires": {"naval_academy": 2},
+    "_requires": "通过法案的建筑门槛：需海军学院 Lv2",
+    "quota": 6,
+    "_quota": "无条约时同时在役主力舰上限",
+    "quota_with_treaty": 3,
+    "_treaty": "全服《海军条约》生效时收紧到的配额（meta.naval_treaty_active=1）"
+  },
   "world": { "map_size": 1000, "seed": 20261001 },
   "tick": {
     "_comment": "economic_min 同时是「1 经济 tick = 多少游戏分钟」与「多少真实分钟」——它是全局时间尺度，调小=整局跑得更快（资源速率比不变）。war_min 同理。",

@@ -15,12 +15,37 @@ from . import pools, fleet
 
 CLASS_ZH = {"frigate": "海盗护卫舰", "destroyer": "海盗驱逐舰",
             "light_cruiser": "海盗轻巡", "ss_attack": "海盗潜艇",
-            "ss_escort": "海盗护航潜艇", "transport": "海盗运输船"}
+            "ss_escort": "海盗护航潜艇", "transport": "海盗运输船",
+            "heavy_cruiser": "海盗重巡", "gunboat": "海盗炮艇",
+            "torpedo_boat": "海盗鱼雷艇", "missile_boat": "海盗导弹艇",
+            "armed_merchant": "武装商船"}
 
 # 中立/阵营通用的舰种名（雇佣军团等非海盗势力用；CLASS_ZH 是海盗专用叫法）
 CLASS_ZH_BASE = {"frigate": "护卫舰", "destroyer": "驱逐舰",
                  "light_cruiser": "轻巡洋舰", "ss_attack": "攻击潜艇",
-                 "ss_escort": "护航潜艇", "transport": "运输船"}
+                 "ss_escort": "护航潜艇", "transport": "运输船",
+                 # §19.17 新增舰种：AI 阵营可能用到，给通用中文名免得显示内部 id
+                 "landing": "登陆艇", "heavy_cruiser": "重巡洋舰",
+                 "battlecruiser": "战列巡洋舰", "battleship": "战列舰",
+                 "escort_cv": "护航航母", "seaplane_tender": "水上机母舰",
+                 "tender": "水上机母舰", "minelayer": "布雷舰",
+                 "minesweeper": "扫雷舰", "sub_chaser": "猎潜舰",
+                 "torpedo_boat": "鱼雷艇", "gunboat": "炮艇",
+                 "supply_ship": "补给舰", "hospital_ship": "医疗舰",
+                 "missile_boat": "导弹艇", "missile_destroyer": "导弹驱逐舰",
+                 "missile_cruiser": "导弹巡洋舰", "ssn": "攻击核潜艇",
+                 "ssbn": "战略核潜艇", "helicopter_cv": "直升机航母",
+                 "aviation_battleship": "航空战列舰", "submarine_cv": "潜水航母",
+                 "ekranoplan": "地效翼飞船"}
+
+
+def class_zh(cls: str, pirate: bool = False) -> str:
+    """舰种中文名；未知舰种回落到 pools 的定义，再不行返回 id 本身。"""
+    if pirate and cls in CLASS_ZH:
+        return CLASS_ZH[cls]
+    if cls in CLASS_ZH_BASE:
+        return CLASS_ZH_BASE[cls]
+    return pools.mod_data()["classes"].get(cls, {}).get("name", cls)
 
 
 def standard_stats(cls: str, tier: int) -> dict:

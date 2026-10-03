@@ -60,19 +60,30 @@ def archetype(cls: str, key: str):
 
 
 def module_info(mid: str):
-    """模块 id → 完整信息 dict（含 cost/stats/tier）；无法解析返回 None。"""
-    parts = mid.split("_t", 1)
-    if len(parts) != 2 or "_" not in parts[1]:
+    """模块 id → 完整信息 dict（含 cost/stats/tier）；无法解析返回 None。
+
+    解析不能简单用 split("_t")：**舰种 id 本身可能含 `_t`**（如 seaplane_tender），
+    那样会被切成 "seaplane" + "ender_t1_..." 而解析失败。改为**先匹配已知舰种前缀**
+    （按长度倒序，取最长匹配），再解析后面的 `_t{tier}_{key}`。
+    """
+    d = mod_data()
+    cls = None
+    for c in sorted(d["classes"], key=len, reverse=True):
+        if mid.startswith(c + "_t"):
+            cls = c
+            break
+    if cls is None:
         return None
-    cls, rest = parts
+    rest = mid[len(cls) + 2:]          # 跳过 "<cls>_t"（下划线+t 共 2 字符）
+    if "_" not in rest:
+        return None
     tier_s, key = rest.split("_", 1)
-    if cls not in mod_data()["classes"] or not tier_s.isdigit():
+    if not tier_s.isdigit():
         return None
     tier = int(tier_s)
     a = archetype(cls, key)
     if not a:
         return None
-    d = mod_data()
     info = {"id": mid, "cls": cls, "tier": tier, "key": key,
             "slot": a["slot"], "rarity": a["rarity"],
             "name": a["name"], "stats": dict(a["stats"])}

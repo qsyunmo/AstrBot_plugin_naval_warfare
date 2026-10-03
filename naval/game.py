@@ -85,6 +85,7 @@ COMMANDS = {
     "贸易": ("trade_cmd", True, [], "贸易 [挂单|市场|接受|拒绝|撤单] ...（§6.2 资源贸易与市场）"),
     "加急": ("rush_cmd", True, ["加速", "催工"], "加急：花额外资源立即完成已排队的建造/生产/研究"),
     "沙盒": ("sandbox_cmd", True, ["gm", "上帝"], "沙盒（仅服主）：全部/解锁/资源/建筑/状态"),
+    "法案": ("capital_cmd", True, ["主力舰", "许可"], "主力舰法案：查看/申请主力舰建造许可与服役配额"),
     "租港": ("lease_cmd", True, [], "租港 <盟友> <坐标>（§6.2 军港租借）"),
     "间谍": ("spy_cmd", True, [], "间谍 <玩家> <行动>（§6.2 破坏/窃取/煽动）"),
     "索赔": ("reparations_cmd", True, [], "索赔 <玩家> <金额> [坐标...]（§6.2 赔款割岛）"),
@@ -558,6 +559,42 @@ class GameCommands:
                 return "❌ 编号应为数字"
         ok, text = _gov.rush_queue(self.conn, self.cfg, ctx.qq, kind, qid)
         return text
+
+    async def capital_cmd(self, ctx: Ctx) -> str:
+        """主力舰法案：查看 / 申请许可（§19.17 第 50 行、§14 第 358 行）。"""
+        from . import capital as _cap
+        if not self._player(ctx.qq):
+            return "❌ 先 /nw注册"
+        sub = (ctx.args[0] if ctx.args else "").lower()
+        st = _cap.status(self.conn, self.cfg, ctx.qq)
+        if sub in ("申请", "通过", "apply"):
+            # 海军学院可能在任意一座自己的岛上，取最高等级
+            academy = max([research.building_level(self.conn, r["x"], r["y"],
+                                                   "naval_academy")
+                           for r in self.conn.execute(
+                               "SELECT x,y FROM islands WHERE owner_qq=?",
+                               (ctx.qq,)).fetchall()] or [0])
+            ok, text = _cap.apply_permit(self.conn, self.cfg, ctx.qq, academy)
+            return text
+        cls_zh = "、".join(self.mc["classes"].get(c, {}).get("name", c)
+                          for c in st["classes"])
+        lines = [
+            "🏛 主力舰法案与服役配额",
+            f"　许可：{'✅ 已通过' if st['has_permit'] else '❌ 尚未通过'}",
+            f"　配额：{st['in_service']}/{st['quota']}"
+            + ("　（全服《海军条约》生效中，配额已收紧）" if st["treaty"] else ""),
+            f"　受管舰种：{cls_zh}",
+        ]
+        if not st["has_permit"]:
+            req = st["permit_requires"] or {}
+            need = "、".join(f"{self.cfg['buildings'].get(k, {}).get('name', k)} Lv{v}"
+                             for k, v in req.items()) or "无"
+            lines.append(f"　通过法案需：资金 {st['permit_money']}　建筑门槛 {need}")
+            lines.append("　→ /nw法案 申请")
+        else:
+            lines.append(f"　还可再造 {st['remaining']} 艘主力舰")
+        lines.append("　（主力舰＝有蓝图也不够，必须先过法案；配额满了要等损失或退役）")
+        return "\n".join(lines)
 
     async def sandbox_cmd(self, ctx: Ctx) -> str:
         """沙盒/GM：仅 config.sandbox.qqs 白名单内的账号可用。"""
@@ -1438,13 +1475,13 @@ class GameCommands:
 
     # ---------- P2b §4/§24.2：登陆夺岛 ----------
     def _fleet_transports(self, fleet_id: int) -> int:
-        """舰队里的运兵船数量（transport 舰种）。"""
+        """舰队里的运兵舰数量。经 §19.17「登陆艇」与运输船都可投送陆战队。"""
         n = 0
         for r in self.conn.execute("SELECT def_id FROM ships WHERE fleet_id=?", (fleet_id,)):
             if str(r["def_id"]).isdigit():
                 d = self.conn.execute("SELECT ship_class FROM designs WHERE id=?",
                                       (int(r["def_id"]),)).fetchone()
-                if d and d["ship_class"] == "transport":
+                if d and d["ship_class"] in ("transport", "landing"):
                     n += 1
         return n
 
@@ -1483,7 +1520,7 @@ class GameCommands:
                     f"先 /nw移动 {f['name']} {tx},{ty}")
         n_tr = self._fleet_transports(f["id"])
         if n_tr <= 0:
-            return "❌ 舰队里没有运兵船（transport），无法投送陆战队。"
+            return "❌ 舰队里没有运兵舰（运输船或登陆艇），无法投送陆战队。"
         foe = self._enemy_fleet_on(ctx.qq, tx, ty)
         if foe:
             return (f"❌ 同格还有敌方舰队【{foe['name']}】，必须先清海才能登陆。\n"
@@ -3042,6 +3079,15 @@ class GameCommands:
                 "　3 加急（多付资源立即下水）" if _gov.rush_enabled(self.cfg) else "")
         rush = (choice == "3")
         p = self._player(ctx.qq)
+        # 主力舰闸门（§19.17 第 50 行）：有蓝图也不够，要法案许可 + 未超服役配额
+        from . import capital as _cap
+        dcls = self.conn.execute("SELECT ship_class FROM designs WHERE id=?",
+                                 (action["design_id"],)).fetchone()
+        if dcls:
+            cok, cmsg = _cap.check_build(self.conn, self.cfg, ctx.qq, dcls["ship_class"])
+            if not cok:
+                self.confirm.drop(ctx.origin, ctx.qq)
+                return cmsg
         cost = dict(action["cost"])
         if rush:
             if not _gov.rush_enabled(self.cfg):

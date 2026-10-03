@@ -16,6 +16,12 @@ from . import aiworld
 FIGHTER, DIVE, TORPEDO, INTERCEPTOR = "fighter", "dive", "torpedo", "interceptor"
 ATTACKERS = (DIVE, TORPEDO)
 
+# 能起降舰载机的舰种（§19.15）。新增的护航航母/直升机航母/航空战列舰/
+# 潜水航母/水上机母舰都算航母，否则它们造出来不会放飞。
+# 注意：这些舰种必须**带 hangar 槽**，否则 fleet_hangar 算出来是 0。
+CARRIER_CLASSES = ("cv", "escort_cv", "helicopter_cv", "aviation_battleship",
+                   "submarine_cv", "seaplane_tender")
+
 
 def acfg(cfg: dict) -> dict:
     return cfg.get("air") or {}
@@ -299,7 +305,7 @@ def fleet_carriers(conn, fleet_id: int):
             d = conn.execute("SELECT ship_class FROM designs WHERE id=?",
                              (int(r["def_id"]),)).fetchone()
             cls = d["ship_class"] if d else None
-        if cls == "cv":
+        if cls in CARRIER_CLASSES:
             out.append((r, int(r["tier"] or 1)))
     return out
 
