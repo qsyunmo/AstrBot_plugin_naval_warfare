@@ -41,10 +41,21 @@ def find_spawn_coord(conn, cfg: dict, rng: random.Random):
                 for r in conn.execute("SELECT capital_x,capital_y FROM players "
                                       "WHERE capital_x IS NOT NULL").fetchall()]
     occupied = {(r["x"], r["y"]) for r in conn.execute("SELECT x,y FROM islands").fetchall()}
+    try:
+        from . import worldgen as _wg
+    except Exception:
+        _wg = None
+
+    def free(x, y):
+        """既没被占，也不能正好压在野生岛上（否则世界生成时会撞岛）。"""
+        if (x, y) in occupied:
+            return False
+        return _wg is None or _wg.peek(cfg, x, y) is None
+
     if not capitals:  # 全服第一人：全图随机
         for _ in range(s["max_tries"]):
             x, y = rng.randint(0, size - 1), rng.randint(0, size - 1)
-            if (x, y) not in occupied:
+            if free(x, y):
                 return x, y
         return None
 
@@ -55,7 +66,7 @@ def find_spawn_coord(conn, cfg: dict, rng: random.Random):
         theta = rng.uniform(0, 2 * math.pi)
         x = (ax + int(r * math.cos(theta))) % size
         y = (ay + int(r * math.sin(theta))) % size
-        if (x, y) in occupied:
+        if not free(x, y):
             continue
         # 仍需与所有首都保持 ≥15
         if all(_torus_dist(x, y, cx, cy, size) >= s["min_dist"] for cx, cy in capitals):

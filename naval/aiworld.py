@@ -900,6 +900,18 @@ def war_tick_regular(conn, cfg: dict, war_tick: int):
             if st["islands"] < max_islands:
                 owned = conn.execute(
                     "SELECT x,y FROM islands WHERE owner_qq=?", (qq,)).fetchall()
+                # 世界生成：先把扩张半径内的野生岛落库，否则正规军无岛可占
+                try:
+                    from . import worldgen as _wg
+                    for o in owned:
+                        _wg.materialize_rect(
+                            conn, cfg,
+                            max(0, o["x"] - max_dist),
+                            max(0, o["y"] - max_dist),
+                            min(fleet.MAP_SIZE - 1, o["x"] + max_dist),
+                            min(fleet.MAP_SIZE - 1, o["y"] + max_dist))
+                except Exception:
+                    _log.exception("[海战模拟器] 正规军扩张时生成世界异常")
                 best = None
                 for o in owned:
                     for cand in conn.execute(

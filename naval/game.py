@@ -248,6 +248,18 @@ def chart_data(conn, cfg: dict, qq: str, radius: int = 10, center: tuple = None)
         logger.exception("[海战模拟器] 海图求航线连通异常")
         _conn_set = None
 
+    # §1 世界生成：野生岛按需落库（稀疏存储，未占领海格运行时生成）。
+    # 必须在读 islands 之前做，否则视野里的荒岛不会出现。
+    try:
+        from . import worldgen as _wg
+        made = _wg.materialize_rect(conn, cfg, x0, y0, x1, y1,
+                                    cap=int((cfg.get("world") or {})
+                                            .get("max_materialize", 4000)))
+        if made:
+            logger.info("[海战模拟器] 世界生成：本区域新增 %d 座野生岛", made)
+    except Exception:
+        logger.exception("[海战模拟器] 世界生成异常")
+
     for isl in conn.execute(
             "SELECT x,y,owner_qq,owner_kind FROM islands"
             " WHERE x BETWEEN ? AND ? AND y BETWEEN ? AND ?",
@@ -2902,7 +2914,12 @@ class GameCommands:
         return "\n".join(lines)
 
     async def chart(self, ctx: Ctx) -> str:
-        d = chart_data(self.conn, ctx.cfg, ctx.qq)
+        # 允许 /nw海图 25 放大观察范围。默认 15：31×31 网格，正好一条消息装得下
+        # （首都视野是 22，所以默认半径下不会出现大片迷雾）
+        radius = 15
+        if ctx.args and str(ctx.args[0]).isdigit():
+            radius = max(4, min(40, int(ctx.args[0])))
+        d = chart_data(self.conn, ctx.cfg, ctx.qq, radius)
         if not d:
             return "❌ 还未注册，先 /nw注册"
         cx, cy = d["center"]
@@ -2929,7 +2946,7 @@ class GameCommands:
             grid[wk["y"] - y0][wk["x"] - x0] = "w"
             kn = "雲墨残骸" if wk["kind"] == "yunmo" else "沉船遗迹"
             marks.append(f"w={kn}({wk['x']},{wk['y']}) 剩{wk['remaining']}次")
-        head = f"🗺️ 以首都({cx},{cy})为中心（北↑，每格约20km）"
+        head = f"🗺️ 以首都({cx},{cy})为中心（北↑，每格约20km，半径 {radius}）"
         body = "\n".join("".join(row) for row in grid)
         legend = ("图例：H首都　#己方岛　o其他岛　R正规军　P海盗据点　x海盗巡逻队"
                   "　M中立商船　$帝国商船　G协会　b叛军　m雇佣军团　E执法者"
