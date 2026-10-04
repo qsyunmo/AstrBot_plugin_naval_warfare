@@ -45,6 +45,10 @@ def _player_units(conn, fid: int) -> list:
     return out
 
 
+# 会被判定为「我方主动进攻」的任务类型（整顿「侵略者」用）
+AGGRESSIVE_MISSIONS = ("attack", "raid", "blockade", "escort", "ambush")
+
+
 def side_fleet_ids(a: dict) -> list:
     """§27 一方可以有多支舰队参战；fleet_id 是主队，fleet_ids 是全部（含主队）。"""
     ids = [int(v) for v in (a.get("fleet_ids") or [])]
@@ -54,10 +58,50 @@ def side_fleet_ids(a: dict) -> list:
     return ids
 
 
-def _player_units_multi(conn, cfg, fids: list) -> list:
+def _apply_refit_combat(conn, units: list, role: str) -> int:
+    """按整顿效果给单位加成。role: 'attack'（我方主动）| 'defend'（我方被袭）。
+
+    - 侵略者   invader    → 主动进攻时 生命与攻击 ×2
+    - 铜墙铁壁 iron_wall  → 被袭防守时 生命与攻击 ×2
+    逐舰队判定（同一方可能有多支舰队，各自整顿不同）。
+    返回受影响的单位数。
+    """
+    if role not in ("attack", "defend"):
+        return 0
+    want = "invader" if role == "attack" else "iron_wall"
+    cache, pending, hit = {}, {}, 0
+    for u in units:
+        if u.get("side") != "p":
+            continue
+        fid = u.get("fleet_id")
+        if fid is None:
+            continue
+        if fid not in cache:
+            cache[fid] = fleet.has_refit(conn, fid, want)
+        if not cache[fid]:
+            continue
+        hit += 1
+        # 生命：当前值与上限一起翻倍（否则翻倍后立刻被"超过上限"裁掉）
+        u["hp"] = float(u.get("hp") or 0) * 2
+        u["maxhp"] = float(u.get("maxhp") or 0) * 2
+        for k in ("fire", "torpedo", "asw"):
+            u[k] = float(u.get(k) or 0) * 2
+        pending.setdefault(fid, []).append(u)
+    _ = pending
+    return hit
+
+
+def _role_of(sides: dict, side_key: str) -> str:
+    """side_key 那一方在这张战斗里是进攻还是防守。"""
+    agg = str(sides.get("aggressor") or "A")
+    return "attack" if agg == side_key else "defend"
+
+
+def _player_units_multi(conn, cfg, fids: list, role: str = None) -> list:
     """§27.3 多支舰队同一方：火力按编队聚合后结算。
 
     每个单位带上 qq/fleet_id，供 §27.6 伤害贡献表按玩家归属。
+    role='attack'/'defend' 时套用舰队整顿（侵略者 / 铜墙铁壁）的 ×2。
     """
     out = []
     for fid in fids:
@@ -74,6 +118,9 @@ def _player_units_multi(conn, cfg, fids: list) -> list:
     # §19.1 舰员经验（新兵/老练/王牌）——作用于舰船本身
     from . import crew as _crew
     _crew.attach_bonus(conn, cfg, out)
+    # 舰队整顿：放在舰长/舰员加成之后，final 值再翻倍
+    if role:
+        _apply_refit_combat(conn, out, role)
     return out
 
 
@@ -176,6 +223,10 @@ def maybe_start_battles(conn, cfg: dict, war_tick: int) -> list:
             sides = {"A": {"side": "player", "qq": f["qq"], "fleet_id": f["id"]},
                      "B": {"side": "ai", "ai_fleet_id": pr["id"], "level": pr["level"],
                            "faction": pr["faction"]}}
+            # 谁先动手 —— 整顿「侵略者/铜墙铁壁」要按这个判攻守。
+            # A 方永远是我们这边的玩家，所以只要判断他当时在干什么：
+            # 进攻类任务 = 我方主动；其余（移动经过/驻防/伏击/巡逻）算被袭。
+            sides["aggressor"] = "A" if mtype in AGGRESSIVE_MISSIONS else "B"
             # §27.1 自动防御协议「同盟协防」：盟友在反应半径内的空闲舰队自动入列
             # （_ally_auto_defense 会就地改写 sides["A"] 的 fleet_ids / co）
             _ally_auto_defense(conn, cfg, sides["A"], pr["x"], pr["y"])
@@ -1339,10 +1390,14 @@ def is_pvp(bside: dict) -> bool:
     return str(bside.get("side") or "") == "player" or bside.get("qq") is not None
 
 
-def _b_units(conn, bside: dict, comp: list) -> list:
-    """取 B 方单位：PvP 时也是玩家舰船（side 仍为 'p'，伤害结算逻辑可直接复用）。"""
+def _b_units(conn, bside: dict, comp: list, sides: dict = None) -> list:
+    """取 B 方单位：PvP 时也是玩家舰船（side 仍为 'p'，伤害结算逻辑可直接复用）。
+
+    sides 传进来时按攻守套用舰队整顿（PvP 里 B 方也是玩家）。
+    """
     if is_pvp(bside):
-        return _player_units_multi(conn, cfg, side_fleet_ids(bside))
+        role = _role_of(sides, "B") if sides else None
+        return _player_units_multi(conn, cfg, side_fleet_ids(bside), role)
     return _ai_units(comp)
 
 
@@ -1394,7 +1449,8 @@ def settle_battles(conn, cfg: dict, war_tick: int) -> list:
         if "retreat_since" in fm and \
                 war_tick - fm["retreat_since"] >= cfg["combat"]["retreat_rounds"] - 1:
             # §19.1 机动：撤退方航速 ≥ 对方 1.2 倍才能真正脱离
-            _pu = _player_units_multi(conn, cfg, side_fleet_ids(a))
+            _pu = _player_units_multi(conn, cfg, side_fleet_ids(a),
+                                     _role_of(sides, 'A'))
             _au = _b_units(conn, bside, comp)
             if _can_disengage(cfg, _pu, _au):
                 conn.execute(
@@ -1414,8 +1470,9 @@ def settle_battles(conn, cfg: dict, war_tick: int) -> list:
                  "⚠️ 摆脱失败：航速不足对方 1.2 倍，仍被咬住（§19.1 机动）。"))
             conn.commit()
 
-        pu = _player_units_multi(conn, cfg, side_fleet_ids(a))
-        au = _b_units(conn, bside, comp)   # §6.2：B 方可能是另一个玩家
+        pu = _player_units_multi(conn, cfg, side_fleet_ids(a),
+                                 _role_of(sides, 'A'))
+        au = _b_units(conn, bside, comp, sides)   # §6.2：B 方可能是另一个玩家
         if not pu or not au:
             conn.commit()
             p = _finish(conn, cfg, b["id"], war_tick, sides,
@@ -1465,7 +1522,8 @@ def settle_battles(conn, cfg: dict, war_tick: int) -> list:
         _rebel_intervention(conn, cfg, b, a, bside, comp, round_no, events, tally)
         _fire_side(conn, cfg, pu[:cap], au, round_no, events, comp,
                    target_stance=a_stance, tally=tally)
-        pu2 = _player_units_multi(conn, cfg, side_fleet_ids(a))  # 重新读存活
+        pu2 = _player_units_multi(conn, cfg, side_fleet_ids(a),
+                                  _role_of(sides, 'A'))  # 重新读存活
         _carry_sub_state(pu, pu2)
         au2 = _b_units(conn, bside, comp)
         _carry_sub_state(au, au2)

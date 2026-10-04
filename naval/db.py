@@ -37,6 +37,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
             if name not in pcols2:
                 conn.execute(f"ALTER TABLE players ADD COLUMN {name} {decl}")
 
+    # 舰队整顿（fleet.refit）：JSON 数组，存已购效果 id。NULL = 没整顿过
+    fcols = {r[1] for r in conn.execute("PRAGMA table_info(fleets)").fetchall()}
+    if fcols and "refit" not in fcols:
+        conn.execute("ALTER TABLE fleets ADD COLUMN refit TEXT")
+
     # §6.2 中立观察国：宣布中立换取不可侵犯（代价是不能主动攻击玩家）
     if pcols2:
         for name, decl in (("is_neutral", "INTEGER DEFAULT 0"),

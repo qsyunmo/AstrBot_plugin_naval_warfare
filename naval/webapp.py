@@ -625,6 +625,48 @@ class NavalWeb:
                     "islands": _gov.my_islands(self.conn, self.cfg, qq),
                     "active": [x, y]}
 
+        # ---------- 舰队整顿 ----------
+        @app.get("/api/refit")
+        async def refit_get(request: Request):
+            qq = self._qq_from_request(request)
+            if not qq:
+                return err("未登录", 401)
+            from . import fleet as _fm
+
+            st = _fm.refit_status(self.conn, self.cfg, qq)
+            rcfg = _fm.refit_cfg(self.cfg)
+            return {"ok": True, "fleets": st,
+                    "price_one": int(rcfg.get("price_one", 50000)),
+                    "price_all": int(rcfg.get("price_all", 500000)),
+                    "effects": [{"id": k,
+                                 "name": _fm.refit_effects(self.cfg)[k]["name"],
+                                 "desc": _fm.refit_effects(self.cfg)[k]["desc"]}
+                                for k in _fm.REFIT_ORDER
+                                if k in _fm.refit_effects(self.cfg)]}
+
+        @app.post("/api/refit")
+        async def refit_buy(request: Request, payload: dict = Body(...)):
+            qq = self._qq_from_request(request)
+            if not qq:
+                return err("未登录", 401)
+            from . import fleet as _fm
+
+            try:
+                fid = int(payload.get("fleet_id"))
+            except (TypeError, ValueError):
+                return err("fleet_id 应为数字")
+            choice = str(payload.get("choice") or "").strip()
+            if not choice:
+                return err("缺少 choice（1|2|3|all）")
+            ok, text = _fm.buy_refit(self.conn, self.cfg, qq, fid, choice)
+            if not ok:
+                return err(text)
+            return {"ok": True, "text": text,
+                    "fleets": _fm.refit_status(self.conn, self.cfg, qq),
+                    "money": self.conn.execute(
+                        "SELECT money FROM players WHERE qq=?", (qq,)
+                    ).fetchone()["money"]}
+
         # ---------- 图形化数据 ----------
         @app.get("/api/map")
         async def map_data(request: Request, radius: int = 10,

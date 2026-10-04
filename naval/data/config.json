@@ -234,6 +234,29 @@
     }
   },
   "fleet": {
+    "refit": {
+      "_comment": "舰队整顿：每支舰队只能选一项，或花大价钱全要。买下后永久生效",
+      "price_one": 50000,
+      "_price_one": "三选一的价格（资金）",
+      "price_all": 500000,
+      "_price_all": "全都要的价格（资金）",
+      "once": true,
+      "_once": "true=每支舰队只能整顿一次（买了就不能换）",
+      "effects": {
+        "ride_wind": {
+          "name": "乘风破浪",
+          "desc": "航行无须时间：下达移动/巡逻指令后立刻抵达目标格"
+        },
+        "iron_wall": {
+          "name": "铜墙铁壁",
+          "desc": "受到袭击时（我方防守），全队生命与攻击 ×2"
+        },
+        "invader": {
+          "name": "侵略者",
+          "desc": "袭击其他舰队时（我方主动），全队生命与攻击 ×2"
+        }
+      }
+    },
     "_comment": "P2a 娱乐尺度：每战争tick(2分钟)移动格数=max(1,round(航速/cells_per_speed))；P2b再按节速修正",
     "cells_per_speed": 8,
     "move_oil_per_ship_cell": 2,

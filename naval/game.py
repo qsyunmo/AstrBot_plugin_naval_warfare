@@ -47,6 +47,7 @@ COMMANDS = {
     # —— P2a：舰队与海战 ——
     "舰队": ("fleet_cmd", True, [], "舰队列表/创建/详情"),
     "编队": ("formation", True, [], "调编 <舰队> 加入/移出 <舰名…>"),
+    "整顿": ("refit_cmd", True, ["舰队整顿"], "舰队整顿 <舰队> <1|2|3|all>（三选一/全都要）"),
     "移动": ("move_cmd", True, ["走"], "舰队移动 <舰队> <x,y>"),
     "攻击": ("attack_cmd", True, ["进攻"], "接敌攻击 <舰队> <x,y>"),
     "撤退": ("retreat_cmd", True, [], "撤离接触 <舰队>"),
@@ -3004,6 +3005,45 @@ class GameCommands:
             lines += ["　" + t for t in last[:10]]
         lines.append(f"　（/nw战报 {b['id']} 看逐轮全流水；Web 战报页可实时观战）")
         return "\n".join(lines)
+
+    async def refit_cmd(self, ctx: Ctx) -> str:
+        """舰队整顿：三选一 5 万，全都要 50 万。"""
+        if not self._player(ctx.qq):
+            return "❌ 还未注册，先 /nw注册"
+        from . import fleet as _fm
+        rcfg = _fm.refit_cfg(self.cfg)
+        effects = _fm.refit_effects(self.cfg)
+        if not effects:
+            return "❌ 本服未启用舰队整顿"
+        p1, pa = (int(rcfg.get("price_one", 50000)),
+                  int(rcfg.get("price_all", 500000)))
+
+        fleets = _fm.list_fleets(self.conn, ctx.qq)
+        if not fleets:
+            return "❌ 你还没有舰队。先 /nw舰队 <名字> 组建"
+
+        # 无参数 / 只给舰队名：看状态
+        if not ctx.args or (len(ctx.args) == 1
+                            and _fm.get_fleet(self.conn, ctx.qq, ctx.args[0])):
+            st = _fm.refit_status(self.conn, self.cfg, ctx.qq)
+            lines = ["⚓ 舰队整顿（每队三选一，或全都要）"]
+            for r in st:
+                mark = ("　✅ " + "、".join(r["have_names"])) if r["done"] else "　— 未整顿"
+                lines.append(f"· {r['name']}{mark}")
+            lines.append(f"价格：三选一 {p1}　全都要 {pa}（单位资金）")
+            lines.append("选购：/nw整顿 <舰队> <1|2|3|all>")
+            for i, k in enumerate(_fm.REFIT_ORDER, 1):
+                if k in effects:
+                    lines.append(f"　{i}. {effects[k]['name']}：{effects[k]['desc']}")
+            return "\n".join(lines)
+
+        if len(ctx.args) < 2:
+            return "用法：/nw整顿 <舰队> <1|2|3|all>"
+        f = _fm.get_fleet(self.conn, ctx.qq, ctx.args[0])
+        if not f:
+            return f"❌ 找不到舰队【{ctx.args[0]}】"
+        ok, text = _fm.buy_refit(self.conn, self.cfg, ctx.qq, f["id"], ctx.args[1])
+        return text
 
     async def battle_report(self, ctx: Ctx) -> str:
         if not self._player(ctx.qq):

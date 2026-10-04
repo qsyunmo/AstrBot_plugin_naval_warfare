@@ -709,6 +709,7 @@ async function loadFleetComposer(){
   try {
     const d = await api('/api/fleets');
     fleetData = d;
+    await loadRefit();
     _syncDraftFromData(d);
     renderFleetComposer();
   } catch(e){
@@ -794,7 +795,9 @@ function renderFleetComposer(){
       + (f.in_battle ? ' disabled' : '')+'>💾 保存编成</button>　'
       + '<button class="ghost" data-fid="'+f.id+'" data-act="disband"'
       + (f.in_battle ? ' disabled' : '')+'>🗑 解散舰队</button>'
-      + '</div></div>');
+      + '</div>'
+      + refitBlock(f)
+      + '</div>');
   });
   if ((d.port||[]).length){
     out.push('<div class="item"><b>🏭 港区可用舰船</b>'
@@ -806,6 +809,15 @@ function renderFleetComposer(){
 
   const nb = $('btnNewFleet');
   if (nb) nb.onclick = newFleetDialog;
+  // 整顿按钮
+  const rfd = refitData || {};
+  box.querySelectorAll('button[data-rf]').forEach(b => {
+    const fid = +b.dataset.rf, ch = b.dataset.choice;
+    const isAll = ch === 'all';
+    b.onclick = () => buyRefit(fid, ch,
+      isAll ? fmtMoney(rfd.price_all || 500000)
+            : fmtMoney(rfd.price_one || 50000));
+  });
   box.querySelectorAll('button[data-act]').forEach(b => {
     const fid = +b.dataset.fid, act = b.dataset.act;
     b.onclick = () => {
@@ -837,6 +849,52 @@ function renderFleetComposer(){
       fleetDraft[+inp.dataset.fid][+inp.dataset.ri].qty = +inp.value || 0;
     };
   });
+}
+/* ---------- 舰队整顿（三选一 / 全都要） ---------- */
+let refitData = null;
+function refitBlock(f){
+  const st = (refitData && refitData.fleets || [])
+    .find(x => String(x.id) === String(f.id));
+  if (!st) return '';
+  const p1 = st.price_one, pa = st.price_all;
+  if (st.done){
+    return '<div class="sub" style="margin-top:5px;color:#25d0a5">⚓ 已整顿：'
+      + esc(st.have_names.join('、')) + '</div>';
+  }
+  if (f.in_battle){
+    return '<div class="sub" style="margin-top:5px;opacity:.7">'
+      + '⚓ 整顿：交战中不可整顿</div>';
+  }
+  return '<div class="sub" style="margin-top:5px">⚓ <b>舰队整顿</b>'
+    + '（三选一 <b>'+fmtMoney(p1)+'</b>　全都要 <b>'+fmtMoney(pa)+'</b>）</div>'
+    + (st.options||[]).map((o, i) =>
+        '<div class="sub" style="padding:2px 0">'
+        + '<button class="ghost" data-rf="'+f.id+'" data-choice="'+(i+1)+'">'
+        + (i+1)+'. '+esc(o.name)+'</button>　<span style="opacity:.75">'
+        + esc(o.desc) + '</span></div>').join('')
+    + '<div class="sub" style="padding:2px 0">'
+    + '<button class="ghost" data-rf="'+f.id+'" data-choice="all">'
+    + '全都要（'+fmtMoney(pa)+'）</button></div>';
+}
+function fmtMoney(n){ return n >= 10000 ? (n/10000)+'万' : String(n); }
+async function buyRefit(fid, choice, label){
+  if (!confirm('花 ' + label + ' 为这支舰队整顿？\n（每支舰队只能整顿一次，之后不能改）')) return;
+  try {
+    const d = await api('/api/refit', {method:'POST',
+      body: JSON.stringify({fleet_id: fid, choice: choice})});
+    refitData = {fleets: d.fleets,
+                 fleets_all: d.fleets};
+    say(d.text || '整顿完成', 'ok');
+    await loadRefit();
+    renderFleetComposer();
+    loadAssets();
+  } catch(e){ say('整顿失败：'+e.message, 'err'); }
+}
+async function loadRefit(){
+  try {
+    const d = await api('/api/refit');
+    refitData = d;
+  } catch(e){ refitData = null; }
 }
 function newFleetDialog(){
   const box = $('fleetComposer');

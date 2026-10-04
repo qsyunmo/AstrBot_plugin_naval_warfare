@@ -169,12 +169,19 @@ def war_tick_move(conn, cfg: dict):
             continue
         m = json.loads(f["mission"] or "{}")
         mtype = m.get("type")
+        # 整顿「乘风破浪」：航行无须时间 —— 移动/攻击/巡逻类任务直接到点
+        fast = has_refit(conn, f["id"], "ride_wind")
 
         if mtype in STATION_TYPES:
             cx, cy = m.get("cx"), m.get("cy")
             if cx is None or cy is None:
                 continue
             radius = int(m.get("radius", 3))
+            if fast and max(abs(f["x"] - cx), abs(f["y"] - cy)) > radius:
+                conn.execute("UPDATE fleets SET x=?,y=? WHERE id=?",
+                             (cx, cy, f["id"]))
+                f = conn.execute("SELECT * FROM fleets WHERE id=?",
+                                 (f["id"],)).fetchone()
             if max(abs(f["x"] - cx), abs(f["y"] - cy)) <= radius:
                 if m.get("phase") != "on_station":
                     m["phase"] = "on_station"
@@ -191,6 +198,12 @@ def war_tick_move(conn, cfg: dict):
         if mtype not in ("move", "attack"):
             continue
         tx, ty = m["tx"], m["ty"]
+        if fast and (f["x"], f["y"]) != (tx, ty):
+            # 乘风破浪：直接到点并清空任务
+            conn.execute("UPDATE fleets SET x=?,y=?,mission='{}' WHERE id=?",
+                         (tx, ty, f["id"]))
+            arrived.append((f, mtype, tx, ty))
+            continue
         step = max(1, round(fleet_speed(conn, f["id"]) / cdiv))
         nx = f["x"] + max(-step, min(step, tx - f["x"]))
         ny = f["y"] + max(-step, min(step, ty - f["y"]))
@@ -227,6 +240,114 @@ def is_subs_only(conn, fleet_id: int) -> bool:
         " WHERE s.fleet_id=? AND (d.ship_class IS NULL"
         " OR d.ship_class NOT LIKE 'ss%')", (fleet_id,)).fetchone()["c"]
     return int(bad or 0) == 0
+
+
+# ------------------------------------------------ 舰队整顿（§ 三选一）
+REFIT_ORDER = ("ride_wind", "iron_wall", "invader")
+
+
+def refit_cfg(cfg: dict) -> dict:
+    return (cfg.get("fleet") or {}).get("refit") or {}
+
+
+def refit_effects(cfg: dict) -> dict:
+    return refit_cfg(cfg).get("effects") or {}
+
+
+def get_refit(conn, fleet_id: int) -> set:
+    """该舰队已购的整顿效果 id 集合。"""
+    r = conn.execute("SELECT refit FROM fleets WHERE id=?", (fleet_id,)).fetchone()
+    if not r or not r["refit"]:
+        return set()
+    try:
+        v = json.loads(r["refit"])
+        return set(v) if isinstance(v, list) else set()
+    except (ValueError, TypeError):
+        return set()
+
+
+def has_refit(conn, fleet_id: int, effect: str) -> bool:
+    return effect in get_refit(conn, fleet_id)
+
+
+def buy_refit(conn, cfg, qq: str, fleet_id: int, choice: str):
+    """购买整顿。choice: 效果 id / "1"~"3" 序号 / "all" 全都要。
+
+    返回 (ok, text)。once=true 时已整顿过的舰队不能再买。
+    """
+    rcfg = refit_cfg(cfg)
+    effects = refit_effects(cfg)
+    if not effects:
+        return False, "❌ 本服未启用舰队整顿"
+    f = conn.execute("SELECT * FROM fleets WHERE id=? AND qq=?",
+                     (fleet_id, qq)).fetchone()
+    if not f:
+        return False, "❌ 找不到自己的舰队"
+    if in_battle(conn, fleet_id):
+        return False, "❌ 舰队正在交战，不能整顿（先 /nw撤退）"
+
+    have = get_refit(conn, fleet_id)
+    if rcfg.get("once", True) and have:
+        names = "、".join(effects[k]["name"] for k in REFIT_ORDER if k in have)
+        return False, f"❌【{f['name']}】已经整顿过了（{names}），不能重复整顿"
+
+    want_all = str(choice).strip().lower() in ("all", "全部", "全都要", "都要", "0")
+    if want_all:
+        picks = [k for k in REFIT_ORDER if k in effects]
+        price = int(rcfg.get("price_all", 500000))
+    else:
+        key = str(choice).strip()
+        if key in effects:
+            picks = [key]
+        elif key.isdigit() and 1 <= int(key) <= len(REFIT_ORDER):
+            k = REFIT_ORDER[int(key) - 1]
+            if k not in effects:
+                return False, "❌ 没有这项整顿"
+            picks = [k]
+        else:
+            return False, "❌ 选择无效（用 1~3 序号，或 all 全都要）"
+        price = int(rcfg.get("price_one", 50000))
+
+    p = conn.execute("SELECT money FROM players WHERE qq=?", (qq,)).fetchone()
+    money = float(p["money"] or 0) if p else 0.0
+    if money < price:
+        return False, f"❌ 资金不足：需要 {price}，你有 {money:.0f}"
+
+    conn.execute("UPDATE players SET money=COALESCE(money,0)-? WHERE qq=?",
+                 (price, qq))
+    newset = sorted(set(have) | set(picks), key=lambda k: REFIT_ORDER.index(k))
+    conn.execute("UPDATE fleets SET refit=? WHERE id=?",
+                 (json.dumps(newset, ensure_ascii=False), fleet_id))
+    conn.commit()
+    lines = [f"✅【{f['name']}】整顿完成，花费资金 {price}"]
+    for k in picks:
+        lines.append(f"　· {effects[k]['name']}：{effects[k]['desc']}")
+    # 铜墙铁壁 + 侵略者 同时拥有 = 攻守都 ×2
+    if "iron_wall" in newset and "invader" in newset:
+        lines.append("　⚔ 两项都在手：无论进攻还是挨打，生命与攻击都 ×2")
+    return True, "\n".join(lines)
+
+
+def refit_status(conn, cfg, qq: str) -> list:
+    """我的全部舰队的整顿状态（Web 与 QQ 共用）。"""
+    effects = refit_effects(cfg)
+    rcfg = refit_cfg(cfg)
+    out = []
+    for f in list_fleets(conn, qq):
+        have = get_refit(conn, f["id"])
+        out.append({
+            "id": f["id"], "name": f["name"],
+            "done": bool(have),
+            "have": sorted(have, key=lambda k: REFIT_ORDER.index(k)),
+            "have_names": [effects[k]["name"] for k in REFIT_ORDER if k in have
+                           and k in effects],
+            "price_one": int(rcfg.get("price_one", 50000)),
+            "price_all": int(rcfg.get("price_all", 500000)),
+            "options": [{"id": k, "name": effects[k]["name"],
+                         "desc": effects[k]["desc"]}
+                        for k in REFIT_ORDER if k in effects],
+        })
+    return out
 
 
 def latest_origin(conn, qq: str):
